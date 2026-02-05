@@ -142,10 +142,7 @@ $Report = Invoke-TntReport @ReportParams
 Include audit logs and mailbox analysis for deeper insights:
 
 ```powershell
-$Report = Invoke-TntReport @ReportParams `
-    -IncludeAuditReports `
-    -IncludeMailboxPermissions `
-    -IncludeCalendarPermissions
+$Report = Invoke-TntReport @ReportParams -IncludeAuditReports -IncludeMailboxPermissions -IncludeCalendarPermissions
 ```
 
 Run specific sections only:

@@ -199,6 +199,7 @@
                 'Defender'
                 'Sentinel'
                 'Azure'
+                'Exchange'
             )
 
             # A URL to the license for this module.
