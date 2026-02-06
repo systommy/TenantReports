@@ -157,38 +157,40 @@ $Report = Invoke-TntReport @ReportParams -ExcludeSections @('MailboxPermissions'
 
 ## Available Reports
 
-| Function | Description |
-|----------|-------------|
-| `Invoke-TntReport` | Runs all reports and consolidates results |
-| **Tenant & Configuration** | |
-| `Get-TntOrganizationReport` | Tenant details and directory statistics |
-| `Get-TntConfigurationReport` | Tenant-wide settings and policies |
-| `Get-TntLicenseReport` | License allocation and usage |
-| `Get-TntLicenseChangeAuditReport` | License assignment and removal history |
-| **Identity & Access** | |
-| `Get-TntM365UserReport` | User accounts, sign-in activity, MFA status |
-| `Get-TntM365RiskyUserReport` | Risky users from Identity Protection |
-| `Get-TntPrivilegedRoleReport` | Privileged role assignments and break-glass accounts |
-| `Get-TntPIMReport` | Privileged Identity Management configuration |
-| `Get-TntConditionalAccessReport` | Conditional Access policy analysis |
-| **App Registrations & Service Principals** | |
-| `Get-TntServicePrincipalPermissionReport` | App registrations and permission grants |
-| `Get-TntAppRegistrationExpiryReport` | Credential and certificate expiration |
-| **Security Scores** | |
-| `Get-TntM365SecureScoreReport` | Microsoft 365 Secure Score with trends |
-| `Get-TntAzureSecureScoreReport` | Azure Security Center score |
-| **Devices** | |
-| `Get-TntIntuneDeviceComplianceReport` | Device compliance status |
-| `Get-TntIntuneAppleCertificateReport` | Apple DEP/APNS certificate expiration |
-| **Email & Exchange** | |
-| `Get-TntDefenderEmailThreatReport` | Email threats from Defender for Office 365 |
-| `Get-TntExchangeMailboxPermissionReport` | Mailbox delegation permissions |
-| `Get-TntExchangeCalendarPermissionReport` | Calendar folder permissions |
-| `Get-TntSharedMailboxComplianceReport` | Shared mailbox compliance |
-| `Get-TntInboxForwardingRuleReport` | External forwarding rules |
-| **Security & Audit** | |
-| `Get-TntM365AuditEvent` | Microsoft 365 and Azure AD audit events |
-| `Get-TntDefenderIncidentReport` | Defender incidents |
+| Function | Description | Required Permissions |
+|----------|-------------|----------------------|
+| `Invoke-TntReport` | Runs all reports and consolidates results | All permissions below |
+| **Tenant & Configuration** | | |
+| `Get-TntOrganizationReport` | Tenant details and directory statistics | Organization.Read.All, Directory.Read.All, Domain.Read.All |
+| `Get-TntConfigurationReport` | Tenant-wide settings and policies | Policy.Read.All, SharePointTenantSettings.Read.All, Exchange Admin |
+| `Get-TntLicenseReport` | License allocation and usage | Organization.Read.All, Directory.Read.All |
+| `Get-TntLicenseChangeAuditReport` | License assignment and removal history | AuditLog.Read.All |
+| **Identity & Access** | | |
+| `Get-TntM365UserReport` | User accounts, sign-in activity, MFA status | User.Read.All, UserAuthenticationMethod.Read.All, AuditLog.Read.All |
+| `Get-TntM365RiskyUserReport` | Risky users from Identity Protection | IdentityRiskyUser.Read.All *(app-only)* |
+| `Get-TntPrivilegedRoleReport` | Privileged role assignments and break-glass accounts | RoleManagement.Read.Directory, Directory.Read.All |
+| `Get-TntPIMReport` | Privileged Identity Management configuration | RoleManagement.Read.Directory *(requires P2 license)* |
+| `Get-TntConditionalAccessReport` | Conditional Access policy analysis | Policy.Read.All, Directory.Read.All, Application.Read.All |
+| **App Registrations & Service Principals** | | |
+| `Get-TntServicePrincipalPermissionReport` | App registrations and permission grants | Application.Read.All, Directory.Read.All |
+| `Get-TntAppRegistrationExpiryReport` | Credential and certificate expiration | Application.Read.All |
+| **Security Scores** | | |
+| `Get-TntM365SecureScoreReport` | Microsoft 365 Secure Score with trends | SecurityEvents.Read.All |
+| `Get-TntAzureSecureScoreReport` | Azure Security Center score | Azure Security Reader role |
+| **Devices** | | |
+| `Get-TntIntuneDeviceComplianceReport` | Device compliance status | DeviceManagementManagedDevices.Read.All, DeviceManagementConfiguration.Read.All |
+| `Get-TntIntuneAppleCertificateReport` | Apple DEP/APNS certificate expiration | DeviceManagementConfiguration.Read.All |
+| **Email & Exchange** | | |
+| `Get-TntDefenderEmailThreatReport` | Email threats from Defender for Office 365 | SecurityEvents.Read.All *(app-only)* |
+| `Get-TntExchangeMailboxPermissionReport` | Mailbox delegation permissions | User.Read.All, Exchange Admin |
+| `Get-TntExchangeCalendarPermissionReport` | Calendar folder permissions | User.Read.All, Exchange Admin |
+| `Get-TntSharedMailboxComplianceReport` | Shared mailbox compliance | User.Read.All, Exchange Admin |
+| `Get-TntInboxForwardingRuleReport` | External forwarding rules | Exchange Admin |
+| **Security & Audit** | | |
+| `Get-TntM365AuditEvent` | Microsoft 365 and Azure AD audit events | AuditLog.Read.All |
+| `Get-TntDefenderIncidentReport` | Defender incidents | SecurityIncident.Read.All |
+
+> **Note:** "Exchange Admin" requires Exchange Online PowerShell access. Items marked *(app-only)* require application permissions and won't work with `-Interactive`.
 
 Run any report individually with `-Interactive` or with app registration credentials.
 
