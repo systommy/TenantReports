@@ -21,7 +21,9 @@ Import-Module TenantReports
 $Report = Invoke-TntReport -Interactive
 ```
 
-A browser window opens for sign-in. **Make usre to authenticate with an account that has Global Administrator permissions.** The module handles permissions, authentication, and session management automatically.
+A browser window opens for sign-in. The module handles permissions, authentication, and session management automatically.
+
+**Note on permissions:** This tool performs deep read operations. While it works best with high privilege (to catch everything), the code is fully open source if you want to audit what Invoke-TntReport is actually reading before running it.
 
 > **Don't worry about errors.** If a section fails due to missing permissions or disabled features, the report continues. Check `$Report.ReportMetadata.SectionStatus` to see what succeeded—most sections will work out of the box.
 
