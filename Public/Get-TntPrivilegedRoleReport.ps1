@@ -302,7 +302,6 @@ function Get-TntPrivilegedRoleReport {
                 CustomRoles               = ($PermanentAssignments | Where-Object { $_.RoleType -eq 'Custom' } | Select-Object RoleId -Unique).Count
             }
 
-            # Build comprehensive report
             Write-Information "Privileged role report completed - $($PermanentAssignments.Count) permanent assignments found" -InformationAction Continue
 
             [PSCustomObject]@{

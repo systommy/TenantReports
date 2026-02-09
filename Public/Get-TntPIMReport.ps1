@@ -193,7 +193,6 @@ function Get-TntPIMReport {
                 ActiveGlobalAdministrators   = ($PIMActiveAssignments | Where-Object { $_.RoleName -eq 'Global Administrator' }).Count
             }
 
-            # Build comprehensive report
             Write-Information "PIM report completed - $($TotalPIMAssignments) total assignments ($($PIMEligibleAssignments.Count) eligible, $($PIMActiveAssignments.Count) active)" -InformationAction Continue
 
             [PSCustomObject]@{

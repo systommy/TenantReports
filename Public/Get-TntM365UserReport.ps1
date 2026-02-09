@@ -162,7 +162,7 @@ function Get-TntM365UserReport {
         try {
             # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
+            $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
             # Retrieve users with required properties - Using Get-MgBetaUser to access lastSuccessfulSignInDateTime
             Write-Verbose 'Retrieving user accounts...'
@@ -295,24 +295,24 @@ function Get-TntM365UserReport {
                     }
 
                     # Determine MFA status and methods
-                    $MfaStatus             = 'Unknown'
-                    $MfaMethods            = @()
+                    $MfaStatus = 'Unknown'
+                    $MfaMethods = @()
                     $IsPasswordlessCapable = $false
-                    $IsSsprRegistered      = $false
-                    $DefaultMfaMethod      = 'None'
+                    $IsSsprRegistered = $false
+                    $DefaultMfaMethod = 'None'
 
                     if ($MfaData) {
-                        $MfaStatus             = if ($MfaData.IsMfaRegistered -eq $true) { 'Registered' } else { 'Not Registered' }
-                        $MfaMethods            = if ($MfaData.MethodsRegistered) { $MfaData.MethodsRegistered } else { @() }
+                        $MfaStatus = if ($MfaData.IsMfaRegistered -eq $true) { 'Registered' } else { 'Not Registered' }
+                        $MfaMethods = if ($MfaData.MethodsRegistered) { $MfaData.MethodsRegistered } else { @() }
                         $IsPasswordlessCapable = $MfaData.IsPasswordlessCapable -eq $true
-                        $IsSsprRegistered      = $MfaData.IsSsprRegistered -eq $true
-                        $DefaultMfaMethod      = if ($MfaData.UserPreferredMethodForSecondaryAuthentication) { $MfaData.UserPreferredMethodForSecondaryAuthentication } else { 'None' }
+                        $IsSsprRegistered = $MfaData.IsSsprRegistered -eq $true
+                        $DefaultMfaMethod = if ($MfaData.UserPreferredMethodForSecondaryAuthentication) { $MfaData.UserPreferredMethodForSecondaryAuthentication } else { 'None' }
                     }
 
                     # Create individual boolean properties for each MFA method
                     $MfaMethodProperties = @{}
                     foreach ($Method in $AllMethods) {
-                        $PropertyName                       = "Has$($Method.Name.Replace(' ', '').Replace('-', ''))"
+                        $PropertyName = "Has$($Method.Name.Replace(' ', '').Replace('-', ''))"
                         $MfaMethodProperties[$PropertyName] = $MfaMethods -contains $Method.type
                     }
 
@@ -460,7 +460,6 @@ function Get-TntM365UserReport {
                 } else { 0 }
             }
 
-            # Build comprehensive report
             Write-Information "User security report completed - $($UserSecurityReport.Count) users processed" -InformationAction Continue
 
             [PSCustomObject]@{

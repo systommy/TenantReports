@@ -156,10 +156,6 @@ function Get-TntExchangeCalendarPermissionReport {
                         $TenantDomain = ($org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
                     }
                 }
-
-                if ($TenantDomain) {
-                    Write-Verbose "Resolved tenant domain for Exchange Online: $TenantDomain"
-                }
             } catch {
                 Write-Verbose "Could not resolve tenant domain, will use TenantId: $($_.Exception.Message)"
             }
@@ -212,12 +208,13 @@ function Get-TntExchangeCalendarPermissionReport {
 
             # Use parallel processing for calendar permissions
             Write-Verbose "Processing $($TargetMailboxes.Count) mailboxes in parallel for calendar folder permissions..."
+
             $AllCalendarPermissions = $TargetMailboxes | ForEach-Object -Parallel {
                 $UserCalendarPermissions = [System.Collections.Generic.List[PSObject]]::new()
 
                 foreach ($FolderName in $using:CalendarFolderNames) {
                     try {
-                        $FolderPath = "$($_.UserPrincipalName):\$FolderName"
+                        $FolderPath = "$($_.UserPrincipalName):\$($FolderName)"
                         $FolderPerms = Get-EXOMailboxFolderPermission -Identity $FolderPath -ErrorAction Stop
 
                         if ($FolderPerms) {
@@ -278,15 +275,12 @@ function Get-TntExchangeCalendarPermissionReport {
                 UsersWithSharedCalendars = ($CalendarPermissions | Select-Object -ExpandProperty Mailbox -Unique).Count
             }
 
-            # Create comprehensive report object
-            $Report = [PSCustomObject][Ordered]@{
+            Write-Information "Calendar permissions analysis completed - $($Summary.TotalPermissions) permissions found" -InformationAction Continue
+            
+            [PSCustomObject][Ordered]@{
                 Summary             = $Summary
                 CalendarPermissions = $CalendarPermissions
             }
-
-            Write-Information "Calendar permissions analysis completed - $($Summary.TotalPermissions) permissions found" -InformationAction Continue
-
-            $Report
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(
                 [System.Exception]::new("Get-TntExchangeCalendarPermissionReport failed: $($_.Exception.Message)", $_.Exception),

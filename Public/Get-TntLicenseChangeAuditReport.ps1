@@ -108,14 +108,14 @@ function Get-TntLicenseChangeAuditReport {
     process {
         try {
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-            $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
+            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
             $Changes = [System.Collections.Generic.List[PSCustomObject]]::new()
 
             # Build filter date
             $FilterDate = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-            $Filter = "activityDateTime ge $FilterDate and activityDisplayName eq 'Change user license'"
-            $Uri = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?`$filter=$Filter&`$top=999"
+            $Filter     = "activityDateTime ge $FilterDate and activityDisplayName eq 'Change user license'"
+            $Uri        = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?`$filter=$Filter&`$top=999"
 
             Write-Verbose "Querying audit logs from $FilterDate..."
 
@@ -137,10 +137,10 @@ function Get-TntLicenseChangeAuditReport {
                     # Skip Signup-initiated events
                     if ($InitiatedBy -eq 'Signup') { continue }
 
-                    $TargetUser = $AuditEvent.targetResources | Where-Object { $_.type -eq 'User' } | Select-Object -First 1
+                    $TargetUser         = $AuditEvent.targetResources | Where-Object { $_.type -eq 'User' } | Select-Object -First 1
                     $ModifiedProperties = if ($TargetUser) { $TargetUser.modifiedProperties } else { @() }
 
-                    $AddedLicenses = @()
+                    $AddedLicenses   = @()
                     $RemovedLicenses = @()
 
                     foreach ($Prop in $ModifiedProperties) {
@@ -166,8 +166,8 @@ function Get-TntLicenseChangeAuditReport {
 
                                 # Fall back to regex for .NET object string format
                                 # Matches: SkuId=f245ecc8-75af-4f8e-b61f-27d8114de5f3
-                                $Matches = [regex]::Matches($RawValue, 'SkuId=([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})')
-                                foreach ($Match in $Matches) {
+                                $RegexMatches = [regex]::Matches($RawValue, 'SkuId=([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})')
+                                foreach ($Match in $RegexMatches) {
                                     if ($Match.Groups[1].Success) {
                                         $SkuIds.Add($Match.Groups[1].Value)
                                     }

@@ -141,7 +141,7 @@ function Get-TntM365AuditEvent {
         try {
             # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
+            $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
             # Define audit activities and properties based on the requested audit mode
             $AuditActivities = @()
@@ -175,9 +175,9 @@ function Get-TntM365AuditEvent {
 
             # Build a single, efficient filter for the API call
             $ActivityFilters = $AuditActivities | ForEach-Object { "activityDisplayName eq '$($_)'" }
-            $FilterString = $ActivityFilters -join ' or '
-            $startDate = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-            $FullFilter = "activityDateTime ge $startDate and ($FilterString)"
+            $FilterString    = $ActivityFilters -join ' or '
+            $startDate       = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $FullFilter      = "activityDateTime ge $startDate and ($FilterString)"
 
             Write-Verbose "Retrieving audit logs with filter: $FullFilter"
             $auditLogs = Get-MgAuditLogDirectoryAudit -Filter $FullFilter -All
@@ -235,9 +235,9 @@ function Get-TntM365AuditEvent {
                 }
 
                 # Extract target resources. An event can have multiple targets.
-                $targetUser = $log.TargetResources | Where-Object { $_.Type -eq 'User' } | Select-Object -First 1
+                $targetUser   = $log.TargetResources | Where-Object { $_.Type -eq 'User' } | Select-Object -First 1
                 $targetDevice = $log.TargetResources | Where-Object { $_.Type -eq 'Device' } | Select-Object -First 1
-                $targetGroup = $log.TargetResources | Where-Object { $_.Type -eq 'Group' } | Select-Object -First 1
+                $targetGroup  = $log.TargetResources | Where-Object { $_.Type -eq 'Group' } | Select-Object -First 1
 
                 if ($targetUser) {
                     $Output.TargetUserUPN = $targetUser.UserPrincipalName
@@ -273,10 +273,8 @@ function Get-TntM365AuditEvent {
                 }
             }
 
-            Write-Verbose "Processing complete. Found $($Results.Count) matching events."
             Write-Information "Audit event retrieval completed - $($Results.Count) matching events found" -InformationAction Continue
 
-            # Return standardized Summary + Details structure
             [PSCustomObject]@{
                 Summary = [PSCustomObject]@{
                     TenantId            = $TenantId

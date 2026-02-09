@@ -311,12 +311,14 @@ function Get-TntIntuneDeviceComplianceReport {
                         'error' { $DeviceStats.ErrorDevices++ }
                         'unknown' { $DeviceStats.UnknownStateDevices++ }
                     }
+
                     # Risk level
                     switch ($Device.RiskLevel) {
                         'High' { $DeviceStats.HighRiskDevices++ }
                         'Medium' { $DeviceStats.MediumRiskDevices++ }
                         'Low' { $DeviceStats.LowRiskDevices++ }
                     }
+
                     # Platform
                     switch ($Device.Platform) {
                         'Windows' { $DeviceStats.WindowsDevices++ }
@@ -324,6 +326,7 @@ function Get-TntIntuneDeviceComplianceReport {
                         'Android' { $DeviceStats.AndroidDevices++ }
                         'macOS' { $DeviceStats.macOSDevices++ }
                     }
+
                     # Platform counts for most common
                     if ($Device.Platform) {
                         if (-not $PlatformCounts.ContainsKey($Device.Platform)) {
@@ -331,10 +334,12 @@ function Get-TntIntuneDeviceComplianceReport {
                         }
                         $PlatformCounts[$Device.Platform]++
                     }
+
                     # Health indicators
                     if ($Device.IsStaleDevice) { $DeviceStats.StaleDevices++ }
                     if ($Device.IsRecentEnrollment) { $DeviceStats.RecentEnrollments++ }
                     if ($Device.RequiresAttention) { $DeviceStats.DevicesRequiringAttention++ }
+
                     # Ownership
                     switch ($Device.OwnerType) {
                         'company' { $DeviceStats.CorporateDevices++ }

@@ -163,7 +163,7 @@ function Get-TntDefenderEmailThreatReport {
                 Write-Warning "Failed to retrieve security alerts: $($_.Exception.Message)"
             }
 
-            # 2. Get email threat detection data
+            # Get email threat detection data
             Write-Verbose 'Retrieving email activity data...'
             $TempFile = [System.IO.Path]::GetTempFileName()
             Remove-Item $TempFile -ErrorAction SilentlyContinue  # Remove empty file created by GetTempFileName to suppress warning
@@ -201,7 +201,7 @@ function Get-TntDefenderEmailThreatReport {
                 }
             }
 
-            # 3. Get threat submission data
+            # Get threat submission data
             Write-Verbose 'Retrieving threat submission data...'
             try {
                 $allSubmissions    = Get-MgBetaSecurityThreatSubmissionEmailThreat -All -ErrorAction Stop

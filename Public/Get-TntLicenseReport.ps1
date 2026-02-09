@@ -146,7 +146,6 @@ function Get-TntLicenseReport {
                 TotalLicensesAvailable = $TotalAvailable
             }
 
-            # Return  report with summary and licenses
             Write-Information "License report completed - $($Summary.TotalSubscriptions) subscriptions found" -InformationAction Continue
 
             [PSCustomObject] @{

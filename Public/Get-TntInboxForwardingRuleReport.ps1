@@ -84,7 +84,7 @@ function Get-TntInboxForwardingRuleReport {
     process {
         try {
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-            $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
+            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
             # Connect to Exchange Online
             try {
@@ -173,8 +173,8 @@ function Get-TntInboxForwardingRuleReport {
             }
 
             # Build summary
-            $EnabledForwards = @($ForwardingRules | Where-Object RuleEnabled -EQ $true)
-            $UniqueMailboxes = ($ForwardingRules.MailboxUPN | Select-Object -Unique).Count
+            $EnabledForwards       = @($ForwardingRules | Where-Object RuleEnabled -EQ $true)
+            $UniqueMailboxes       = ($ForwardingRules.MailboxUPN | Select-Object -Unique).Count
             $UniqueExternalDomains = ($ForwardingRules.TargetDomain | Select-Object -Unique)
 
             $Summary = [PSCustomObject]@{

@@ -117,190 +117,190 @@ function Get-TntIntuneAppleCertificateReport {
 
     process {
         try {
-        # Establish connection
-        $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-        $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
+            # Establish connection
+            $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
+            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
-        # Initialize collections for certificate/token data
-        $AllItems = [System.Collections.Generic.List[PSObject]]::new()
-        $Errors   = [System.Collections.Generic.List[PSObject]]::new()
+            # Initialize collections for certificate/token data
+            $AllItems = [System.Collections.Generic.List[PSObject]]::new()
+            $Errors   = [System.Collections.Generic.List[PSObject]]::new()
 
-        # Get APNS Certificate
-        Write-Verbose 'Retrieving Apple Push Notification Certificate...'
-        try {
-            $ApnsCertUri = 'https://graph.microsoft.com/beta/deviceManagement/applePushNotificationCertificate'
-            $ApnsCert = Invoke-MgGraphRequest -Uri $ApnsCertUri -Method GET -ErrorAction Stop
+            # Get APNS Certificate
+            Write-Verbose 'Retrieving Apple Push Notification Certificate...'
+            try {
+                $ApnsCertUri = 'https://graph.microsoft.com/beta/deviceManagement/applePushNotificationCertificate'
+                $ApnsCert = Invoke-MgGraphRequest -Uri $ApnsCertUri -Method GET -ErrorAction Stop
 
-            if ($ApnsCert) {
-                $DaysUntilExpiry = ([DateTime]$ApnsCert.ExpirationDateTime - (Get-Date)).Days
-                $IsExpired       = $DaysUntilExpiry -lt 0
-                $IsExpiring      = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
+                if ($ApnsCert) {
+                    $DaysUntilExpiry = ([DateTime]$ApnsCert.ExpirationDateTime - (Get-Date)).Days
+                    $IsExpired = $DaysUntilExpiry -lt 0
+                    $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
 
-                $ApnsItem = [PSCustomObject]@{
-                    Type                    = 'APNS'
-                    Name                    = 'Apple Push Notification Certificate'
-                    AppleIdentifier         = $ApnsCert.AppleIdentifier ?? 'Not available'
-                    ExpirationDateTime      = $ApnsCert.ExpirationDateTime
-                    DaysUntilExpiry         = $DaysUntilExpiry
-                    IsExpired               = $IsExpired
-                    IsExpiring              = $IsExpiring
-                    RiskLevel               = $CertificateTypeRisk['APNS'].RiskLevel
-                    Impact                  = $CertificateTypeRisk['APNS'].Impact
-                    RenewalGuidance         = $CertificateTypeRisk['APNS'].Renewability
-                    LastModifiedDateTime    = $ApnsCert.LastModifiedDateTime
-                    CertificateSerialNumber = $ApnsCert.CertificateSerialNumber ?? 'Not available'
-                    Status                  = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
+                    $ApnsItem = [PSCustomObject]@{
+                        Type                    = 'APNS'
+                        Name                    = 'Apple Push Notification Certificate'
+                        AppleIdentifier         = $ApnsCert.AppleIdentifier ?? 'Not available'
+                        ExpirationDateTime      = $ApnsCert.ExpirationDateTime
+                        DaysUntilExpiry         = $DaysUntilExpiry
+                        IsExpired               = $IsExpired
+                        IsExpiring              = $IsExpiring
+                        RiskLevel               = $CertificateTypeRisk['APNS'].RiskLevel
+                        Impact                  = $CertificateTypeRisk['APNS'].Impact
+                        RenewalGuidance         = $CertificateTypeRisk['APNS'].Renewability
+                        LastModifiedDateTime    = $ApnsCert.LastModifiedDateTime
+                        CertificateSerialNumber = $ApnsCert.CertificateSerialNumber ?? 'Not available'
+                        Status                  = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
+                    }
+
+                    $AllItems.Add($ApnsItem)
+
+                    Write-Verbose "APNS Certificate: $(if ($ApnsCert.ExpirationDateTime) { "Expires $($ApnsCert.ExpirationDateTime) ($($DaysUntilExpiry) days)" } else { 'No expiration data available' })"
+                } else {
+                    Write-Verbose 'No APNS Certificates found in the tenant'
                 }
-
-                $AllItems.Add($ApnsItem)
-
-                Write-Verbose "APNS Certificate: $(if ($ApnsCert.ExpirationDateTime) { "Expires $($ApnsCert.ExpirationDateTime) ($($DaysUntilExpiry) days)" } else { 'No expiration data available' })"
-            } else {
-                Write-Verbose 'No APNS Certificates found in the tenant'
+            } catch {
+                # This endpoint throws a terminating error if no cert is found which messes up Invoke-SecurityReport; suppress error if 'NotFound' in error msg.
+                if ($_.Exception.Message -match 'NotFound') {
+                    Write-Verbose 'No APNS Certificates found in the tenant'
+                } else {
+                    $ErrorMsg = "Failed to retrieve APNS certificate: $($_.Exception.Message)"
+                    Write-Warning $ErrorMsg
+                    $Errors.Add([PSCustomObject]@{
+                            Type  = 'APNS'
+                            Error = $ErrorMsg
+                        })
+                }
             }
-        } catch {
-            # This endpoint throws a terminating error if no cert is found which messes up Invoke-SecurityReport; suppress error if 'NotFound' in error msg.
-            if ($_.Exception.Message -match 'NotFound') {
-                Write-Verbose 'No APNS Certificates found in the tenant'
-            } else {
-                $ErrorMsg = "Failed to retrieve APNS certificate: $($_.Exception.Message)"
+
+            # Get DEP Tokens
+            Write-Verbose 'Retrieving Apple DEP (Device Enrollment Program) tokens...'
+            try {
+                # DEP tokens are in beta endpoint
+                $DepTokensUri = 'https://graph.microsoft.com/beta/deviceManagement/depOnboardingSettings'
+                $DepTokensResponse = Invoke-MgGraphRequest -Uri $DepTokensUri -Method GET -ErrorAction Stop
+
+                if ($DepTokensResponse.value -and $DepTokensResponse.value.Count -gt 0) {
+                    foreach ($DepToken in $DepTokensResponse.value) {
+                        if ($DepToken.tokenExpirationDateTime) {
+                            $DaysUntilExpiry = ([DateTime]$DepToken.tokenExpirationDateTime - (Get-Date)).Days
+                            $IsExpired = $DaysUntilExpiry -lt 0
+                            $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
+
+                            $DepItem = [PSCustomObject]@{
+                                Type                 = 'DEP'
+                                Name                 = "$($DepToken.tokenName ?? 'DEP Token') ($($DepToken.tokenType ?? 'Unknown Type'))"
+                                AppleIdentifier      = $DepToken.appleIdentifier ?? 'Not available'
+                                ExpirationDateTime   = $DepToken.tokenExpirationDateTime
+                                DaysUntilExpiry      = $DaysUntilExpiry
+                                IsExpired            = $IsExpired
+                                IsExpiring           = $IsExpiring
+                                RiskLevel            = $CertificateTypeRisk['DEP'].RiskLevel
+                                Impact               = $CertificateTypeRisk['DEP'].Impact
+                                RenewalGuidance      = $CertificateTypeRisk['DEP'].Renewability
+                                LastModifiedDateTime = $DepToken.lastModifiedDateTime
+                                LastSuccessfulSync   = $DepToken.lastSuccessfulSyncDateTime
+                                SyncedDeviceCount    = $DepToken.syncedDeviceCount ?? 0
+                                TokenId              = $DepToken.id
+                                Status               = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
+                            }
+
+                            $AllItems.Add($DepItem)
+                        }
+                    }
+
+                    Write-Verbose "Found $($DepTokensResponse.value.Count) DEP token(s)"
+                } else {
+                    Write-Verbose 'No DEP tokens found in the tenant'
+                }
+            } catch {
+                $ErrorMsg = "Failed to retrieve DEP tokens: $($_.Exception.Message)"
                 Write-Warning $ErrorMsg
                 $Errors.Add([PSCustomObject]@{
-                        Type  = 'APNS'
+                        Type  = 'DEP'
                         Error = $ErrorMsg
                     })
             }
-        }
 
-        # Get DEP Tokens
-        Write-Verbose 'Retrieving Apple DEP (Device Enrollment Program) tokens...'
-        try {
-            # DEP tokens are in beta endpoint
-            $DepTokensUri      = 'https://graph.microsoft.com/beta/deviceManagement/depOnboardingSettings'
-            $DepTokensResponse = Invoke-MgGraphRequest -Uri $DepTokensUri -Method GET -ErrorAction Stop
+            # Get VPP Tokens
+            Write-Verbose 'Retrieving Apple VPP (Volume Purchase Program) tokens...'
+            try {
+                # VPP tokens are in beta endpoint
+                $VppTokensUri = 'https://graph.microsoft.com/beta/deviceAppManagement/vppTokens'
+                $VppTokensResponse = Invoke-MgGraphRequest -Uri $VppTokensUri -Method GET -ErrorAction Stop
 
-            if ($DepTokensResponse.value -and $DepTokensResponse.value.Count -gt 0) {
-                foreach ($DepToken in $DepTokensResponse.value) {
-                    if ($DepToken.tokenExpirationDateTime) {
-                        $DaysUntilExpiry = ([DateTime]$DepToken.tokenExpirationDateTime - (Get-Date)).Days
-                        $IsExpired       = $DaysUntilExpiry -lt 0
-                        $IsExpiring      = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
+                if ($VppTokensResponse.value -and $VppTokensResponse.value.Count -gt 0) {
+                    foreach ($VppToken in $VppTokensResponse.value) {
+                        if ($VppToken.expirationDateTime) {
+                            $DaysUntilExpiry = ([DateTime]$VppToken.expirationDateTime - (Get-Date)).Days
+                            $IsExpired = $DaysUntilExpiry -lt 0
+                            $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
 
-                        $DepItem = [PSCustomObject]@{
-                            Type                 = 'DEP'
-                            Name                 = "$($DepToken.tokenName ?? 'DEP Token') ($($DepToken.tokenType ?? 'Unknown Type'))"
-                            AppleIdentifier      = $DepToken.appleIdentifier ?? 'Not available'
-                            ExpirationDateTime   = $DepToken.tokenExpirationDateTime
-                            DaysUntilExpiry      = $DaysUntilExpiry
-                            IsExpired            = $IsExpired
-                            IsExpiring           = $IsExpiring
-                            RiskLevel            = $CertificateTypeRisk['DEP'].RiskLevel
-                            Impact               = $CertificateTypeRisk['DEP'].Impact
-                            RenewalGuidance      = $CertificateTypeRisk['DEP'].Renewability
-                            LastModifiedDateTime = $DepToken.lastModifiedDateTime
-                            LastSuccessfulSync   = $DepToken.lastSuccessfulSyncDateTime
-                            SyncedDeviceCount    = $DepToken.syncedDeviceCount ?? 0
-                            TokenId              = $DepToken.id
-                            Status               = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
+                            $VppItem = [PSCustomObject]@{
+                                Type                 = 'VPP'
+                                Name                 = "$($VppToken.organizationName ?? 'VPP Token') ($($VppToken.vppTokenAccountType ?? 'Unknown Account Type'))"
+                                AppleIdentifier      = $VppToken.appleId ?? 'Not available'
+                                ExpirationDateTime   = $VppToken.expirationDateTime
+                                DaysUntilExpiry      = $DaysUntilExpiry
+                                IsExpired            = $IsExpired
+                                IsExpiring           = $IsExpiring
+                                RiskLevel            = $CertificateTypeRisk['VPP'].RiskLevel
+                                Impact               = $CertificateTypeRisk['VPP'].Impact
+                                RenewalGuidance      = $CertificateTypeRisk['VPP'].Renewability
+                                LastModifiedDateTime = $VppToken.lastModifiedDateTime
+                                LastSyncDateTime     = $VppToken.lastSyncDateTime
+                                TokenId              = $VppToken.id
+                                CountryOrRegion      = $VppToken.countryOrRegion ?? 'Not specified'
+                                Status               = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
+                            }
+
+                            $AllItems.Add($VppItem)
                         }
-
-                        $AllItems.Add($DepItem)
                     }
+
+                    Write-Verbose "Found $($VppTokensResponse.value.Count) VPP token(s)"
+                } else {
+                    Write-Verbose 'No VPP tokens found in the tenant'
                 }
-
-                Write-Verbose "Found $($DepTokensResponse.value.Count) DEP token(s)"
-            } else {
-                Write-Verbose 'No DEP tokens found in the tenant'
+            } catch {
+                $ErrorMsg = "Failed to retrieve VPP tokens: $($_.Exception.Message)"
+                Write-Warning $ErrorMsg
+                $Errors.Add([PSCustomObject]@{
+                        Type  = 'VPP'
+                        Error = $ErrorMsg
+                    })
             }
-        } catch {
-            $ErrorMsg = "Failed to retrieve DEP tokens: $($_.Exception.Message)"
-            Write-Warning $ErrorMsg
-            $Errors.Add([PSCustomObject]@{
-                    Type  = 'DEP'
-                    Error = $ErrorMsg
-                })
-        }
 
-        # Get VPP Tokens
-        Write-Verbose 'Retrieving Apple VPP (Volume Purchase Program) tokens...'
-        try {
-            # VPP tokens are in beta endpoint
-            $VppTokensUri      = 'https://graph.microsoft.com/beta/deviceAppManagement/vppTokens'
-            $VppTokensResponse = Invoke-MgGraphRequest -Uri $VppTokensUri -Method GET -ErrorAction Stop
-
-            if ($VppTokensResponse.value -and $VppTokensResponse.value.Count -gt 0) {
-                foreach ($VppToken in $VppTokensResponse.value) {
-                    if ($VppToken.expirationDateTime) {
-                        $DaysUntilExpiry = ([DateTime]$VppToken.expirationDateTime - (Get-Date)).Days
-                        $IsExpired       = $DaysUntilExpiry -lt 0
-                        $IsExpiring      = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
-
-                        $VppItem = [PSCustomObject]@{
-                            Type                 = 'VPP'
-                            Name                 = "$($VppToken.organizationName ?? 'VPP Token') ($($VppToken.vppTokenAccountType ?? 'Unknown Account Type'))"
-                            AppleIdentifier      = $VppToken.appleId ?? 'Not available'
-                            ExpirationDateTime   = $VppToken.expirationDateTime
-                            DaysUntilExpiry      = $DaysUntilExpiry
-                            IsExpired            = $IsExpired
-                            IsExpiring           = $IsExpiring
-                            RiskLevel            = $CertificateTypeRisk['VPP'].RiskLevel
-                            Impact               = $CertificateTypeRisk['VPP'].Impact
-                            RenewalGuidance      = $CertificateTypeRisk['VPP'].Renewability
-                            LastModifiedDateTime = $VppToken.lastModifiedDateTime
-                            LastSyncDateTime     = $VppToken.lastSyncDateTime
-                            TokenId              = $VppToken.id
-                            CountryOrRegion      = $VppToken.countryOrRegion ?? 'Not specified'
-                            Status               = if ($IsExpired) { 'Expired' } elseif ($IsExpiring) { 'ExpiringSoon' } else { 'Valid' }
-                        }
-
-                        $AllItems.Add($VppItem)
-                    }
-                }
-
-                Write-Verbose "Found $($VppTokensResponse.value.Count) VPP token(s)"
-            } else {
-                Write-Verbose 'No VPP tokens found in the tenant'
+            # Throw terminating error if no cert/token is found at all
+            if ($AllItems.Count -eq 0) {
+                $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                    [System.Exception]::new('Get-TntIntuneAppleCertificateReport failed: No Apple certificates/tokens found.'),
+                    'GetTntIntuneAppleCertificateReportError',
+                    [System.Management.Automation.ErrorCategory]::OperationStopped,
+                    $TenantId
+                )
+                $PSCmdlet.ThrowTerminatingError($errorRecord)
             }
-        } catch {
-            $ErrorMsg = "Failed to retrieve VPP tokens: $($_.Exception.Message)"
-            Write-Warning $ErrorMsg
-            $Errors.Add([PSCustomObject]@{
-                    Type  = 'VPP'
-                    Error = $ErrorMsg
-                })
-        }
-
-        # Throw terminating error if no cert/token is found at all
-        if ($AllItems.Count -eq 0) {
-            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
-                [System.Exception]::new('Get-TntIntuneAppleCertificateReport failed: No Apple certificates/tokens found.'),
-                'GetTntIntuneAppleCertificateReportError',
-                [System.Management.Automation.ErrorCategory]::OperationStopped,
-                $TenantId
-            )
-            $PSCmdlet.ThrowTerminatingError($errorRecord)
-        }
         
-        # Generate summary statistics
-        $ExpiringCount = ($AllItems | Where-Object { $_.IsExpiring }).Count
-        $Summary = [PSCustomObject]@{
-            TenantId            = $TenantId
-            ReportGeneratedDate = Get-Date
-            TotalItems          = $AllItems.Count
-            ExpiringItems       = $ExpiringCount
-            ExpiredItems        = ($AllItems | Where-Object { $_.IsExpired }).Count
-            ValidItems          = ($AllItems | Where-Object { -not $_.IsExpired -and -not $_.IsExpiring }).Count
-            APNSCertificates    = ($AllItems | Where-Object { $_.Type -eq 'APNS' }).Count
-            DEPTokens           = ($AllItems | Where-Object { $_.Type -eq 'DEP' }).Count
-            VPPTokens           = ($AllItems | Where-Object { $_.Type -eq 'VPP' }).Count
-        }
+            # Generate summary statistics
+            $ExpiringCount = ($AllItems | Where-Object { $_.IsExpiring }).Count
+            $Summary = [PSCustomObject]@{
+                TenantId            = $TenantId
+                ReportGeneratedDate = Get-Date
+                TotalItems          = $AllItems.Count
+                ExpiringItems       = $ExpiringCount
+                ExpiredItems        = ($AllItems | Where-Object { $_.IsExpired }).Count
+                ValidItems          = ($AllItems | Where-Object { -not $_.IsExpired -and -not $_.IsExpiring }).Count
+                APNSCertificates    = ($AllItems | Where-Object { $_.Type -eq 'APNS' }).Count
+                DEPTokens           = ($AllItems | Where-Object { $_.Type -eq 'DEP' }).Count
+                VPPTokens           = ($AllItems | Where-Object { $_.Type -eq 'VPP' }).Count
+            }
 
-        # Create report
-        Write-Information "Apple certificate monitoring completed - $($AllItems.Count) items checked ($ExpiringCount expiring soon)" -InformationAction Continue
-        [PSCustomObject]@{
-            Summary  = $Summary
-            AllItems = $AllItems | Sort-Object Type, DaysUntilExpiry
-        }
+            Write-Information "Apple certificate monitoring completed - $($AllItems.Count) items checked ($ExpiringCount expiring soon)" -InformationAction Continue
+
+            [PSCustomObject]@{
+                Summary  = $Summary
+                AllItems = $AllItems | Sort-Object Type, DaysUntilExpiry
+            }
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(
                 [System.Exception]::new("Get-TntIntuneAppleCertificateReport failed: $($_.Exception.Message)", $_.Exception),

@@ -497,9 +497,7 @@ function Get-TntM365SecureScoreReport {
                 LastUpdated                 = $LatestScore.CreatedDateTime
             }
 
-            # Create comprehensive report structure
-            Write-Verbose "Generated secure score report with $($SecurityControls.Count) security controls"
-            Write-Information "Secure Score report completed - Score: $CurrentScoreValue/$MaxScoreValue ($CurrentScorePercentage%)" -InformationAction Continue
+            Write-Information "Secure Score report completed - Score: $($CurrentScoreValue)/$($MaxScoreValue) ($($CurrentScorePercentage)%)" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                 = $Summary

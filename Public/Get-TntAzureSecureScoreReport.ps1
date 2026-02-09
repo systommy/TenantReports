@@ -497,7 +497,6 @@ function Get-TntAzureSecureScoreReport {
                 Write-Verbose "Historical data processing completed. Found $($HistoricalScores.Count) historical entries"
             }
 
-            # Build comprehensive report
             Write-Information "Azure Secure Score collection completed - $($ValidScores.Count) subscriptions processed" -InformationAction Continue
 
             [PSCustomObject][Ordered]@{

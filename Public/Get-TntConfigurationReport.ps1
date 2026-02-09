@@ -102,161 +102,161 @@ function Get-TntConfigurationReport {
 
             $Settings = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-            # --- Authorization Policy ---
+            # Authorization Policy
             Write-Verbose 'Retrieving authorization policy...'
-            $authPolicy = Invoke-MgGraphRequest -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' -Method GET -ErrorAction Stop
-            $defaultPerms = $authPolicy.defaultUserRolePermissions
+            $AuthPolicy = Invoke-MgGraphRequest -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' -Method GET -ErrorAction Stop
+            $DefaultPerms = $AuthPolicy.defaultUserRolePermissions
 
             # Users can register applications
-            $allowApps = $defaultPerms.allowedToCreateApps
+            $AllowApps = $DefaultPerms.allowedToCreateApps
             $Settings.Add([PSCustomObject]@{
                     Category         = 'AuthorizationPolicy'
                     SettingName      = 'Users can register applications'
-                    CurrentValue     = $allowApps
+                    CurrentValue     = $AllowApps
                     RecommendedValue = $false
-                    RiskLevel        = if ($allowApps -eq $true) { 'High' } else { 'Low' }
+                    RiskLevel        = if ($AllowApps -eq $true) { 'High' } else { 'Low' }
                     Description      = 'Controls whether non-admin users can register new application registrations in Entra ID.'
                     Recommendation   = 'Disable user app registration and delegate to administrators to prevent unauthorized OAuth applications.'
                 })
 
             # Users can create security groups
-            $allowGroups = $defaultPerms.allowedToCreateSecurityGroups
+            $AllowGroups = $DefaultPerms.allowedToCreateSecurityGroups
             $Settings.Add([PSCustomObject]@{
                     Category         = 'AuthorizationPolicy'
                     SettingName      = 'Users can create security groups'
-                    CurrentValue     = $allowGroups
+                    CurrentValue     = $AllowGroups
                     RecommendedValue = $false
-                    RiskLevel        = if ($allowGroups -eq $true) { 'Medium' } else { 'Low' }
+                    RiskLevel        = if ($AllowGroups -eq $true) { 'Medium' } else { 'Low' }
                     Description      = 'Controls whether non-admin users can create security groups.'
                     Recommendation   = 'Restrict security group creation to administrators to maintain access control governance.'
                 })
 
             # Non-admins can create tenants
-            $allowTenants = $defaultPerms.allowedToCreateTenants
+            $AllowTenants = $DefaultPerms.allowedToCreateTenants
             $Settings.Add([PSCustomObject]@{
                     Category         = 'AuthorizationPolicy'
                     SettingName      = 'Non-admins can create tenants'
-                    CurrentValue     = $allowTenants
+                    CurrentValue     = $AllowTenants
                     RecommendedValue = $false
-                    RiskLevel        = if ($allowTenants -eq $true) { 'Medium' } else { 'Low' }
+                    RiskLevel        = if ($AllowTenants -eq $true) { 'Medium' } else { 'Low' }
                     Description      = 'Controls whether non-admin users can create new Azure AD tenants.'
                     Recommendation   = 'Restrict tenant creation to administrators to prevent shadow IT and unmanaged tenants.'
                 })
 
             # Guest user access level
-            $guestRoleId = $authPolicy.guestUserRoleId
-            $guestAccessLabel = switch ($guestRoleId) {
+            $GuestRoleId = $AuthPolicy.guestUserRoleId
+            $guestAccessLabel = switch ($GuestRoleId) {
                 'a0b1b346-4d3e-4e8b-98f8-753987be4970' { 'Same as member users' }
                 '10dae51f-b6af-4016-8d66-8c2a99b929b3' { 'Limited access (recommended)' }
                 '2af84b1e-32c8-42b7-82bc-daa82404023b' { 'Restricted access (most restrictive)' }
-                default { $guestRoleId }
+                default { $GuestRoleId }
             }
             $Settings.Add([PSCustomObject]@{
                     Category         = 'GuestAccess'
                     SettingName      = 'Guest user access level'
                     CurrentValue     = $guestAccessLabel
                     RecommendedValue = 'Limited access (recommended)'
-                    RiskLevel        = if ($guestRoleId -eq 'a0b1b346-4d3e-4e8b-98f8-753987be4970') { 'High' }
-                    elseif ($guestRoleId -eq '10dae51f-b6af-4016-8d66-8c2a99b929b3') { 'Low' }
-                    elseif ($guestRoleId -eq '2af84b1e-32c8-42b7-82bc-daa82404023b') { 'Low' }
+                    RiskLevel        = if ($GuestRoleId -eq 'a0b1b346-4d3e-4e8b-98f8-753987be4970') { 'High' }
+                    elseif ($GuestRoleId -eq '10dae51f-b6af-4016-8d66-8c2a99b929b3') { 'Low' }
+                    elseif ($GuestRoleId -eq '2af84b1e-32c8-42b7-82bc-daa82404023b') { 'Low' }
                     else { 'Info' }
                     Description      = 'Defines the default access level for guest users in the directory.'
                     Recommendation   = 'Set guest access to "Limited access" or "Restricted access" to prevent guests from enumerating directory objects.'
                 })
 
             # Who can invite guests
-            $allowInvites = $authPolicy.allowInvitesFrom
+            $AllowInvites = $AuthPolicy.allowInvitesFrom
             $Settings.Add([PSCustomObject]@{
                     Category         = 'GuestAccess'
                     SettingName      = 'Who can invite guests'
-                    CurrentValue     = $allowInvites
+                    CurrentValue     = $AllowInvites
                     RecommendedValue = 'adminsAndGuestInviters'
-                    RiskLevel        = if ($allowInvites -eq 'everyone') { 'High' }
-                    elseif ($allowInvites -eq 'adminsAndGuestInviters') { 'Low' }
-                    elseif ($allowInvites -eq 'none') { 'Low' }
+                    RiskLevel        = if ($AllowInvites -eq 'everyone') { 'High' }
+                    elseif ($AllowInvites -eq 'adminsAndGuestInviters') { 'Low' }
+                    elseif ($AllowInvites -eq 'none') { 'Low' }
                     else { 'Medium' }
                     Description      = 'Controls who can invite external guest users to the tenant.'
                     Recommendation   = 'Restrict guest invitations to admins and users with the Guest Inviter role.'
                 })
 
             # Email verified users can join
-            $emailVerifiedJoin = $authPolicy.allowEmailVerifiedUsersToJoinOrganization
+            $EmailVerifiedJoin = $AuthPolicy.allowEmailVerifiedUsersToJoinOrganization
             $Settings.Add([PSCustomObject]@{
                     Category         = 'AuthorizationPolicy'
                     SettingName      = 'Email verified users can join organization'
-                    CurrentValue     = $emailVerifiedJoin
+                    CurrentValue     = $EmailVerifiedJoin
                     RecommendedValue = $false
-                    RiskLevel        = if ($emailVerifiedJoin -eq $true) { 'Medium' } else { 'Low' }
+                    RiskLevel        = if ($EmailVerifiedJoin -eq $true) { 'Medium' } else { 'Low' }
                     Description      = 'Controls whether users who verify their email address can self-service join the organization.'
                     Recommendation   = 'Disable to prevent uncontrolled user onboarding via email verification.'
                 })
 
             # User consent policy
-            $consentPolicies = $defaultPerms.permissionGrantPoliciesAssigned
-            $hasLegacyConsent = $consentPolicies -contains 'microsoft-user-default-legacy'
-            $consentDisplay = if ($consentPolicies) { $consentPolicies -join ', ' } else { 'None (admin consent required)' }
+            $ConsentPolicies = $DefaultPerms.permissionGrantPoliciesAssigned
+            $HasLegacyConsent = $ConsentPolicies -contains 'microsoft-user-default-legacy'
+            $ConsentDisplay = if ($ConsentPolicies) { $ConsentPolicies -join ', ' } else { 'None (admin consent required)' }
             $Settings.Add([PSCustomObject]@{
                     Category         = 'ApplicationConsent'
                     SettingName      = 'User consent policy'
-                    CurrentValue     = $consentDisplay
+                    CurrentValue     = $ConsentDisplay
                     RecommendedValue = 'microsoft-user-default-low or disabled'
-                    RiskLevel        = if ($hasLegacyConsent) { 'High' }
-                    elseif (-not $consentPolicies -or $consentPolicies.Count -eq 0) { 'Low' }
+                    RiskLevel        = if ($HasLegacyConsent) { 'High' }
+                    elseif (-not $ConsentPolicies -or $ConsentPolicies.Count -eq 0) { 'Low' }
                     else { 'Medium' }
                     Description      = 'Defines which permission grant policies allow users to consent to applications.'
                     Recommendation   = 'Remove legacy consent policy and restrict user consent to low-risk permissions or require admin consent for all apps.'
                 })
 
             # Admin consent workflow
-            $adminConsentEnabled = -not (-not $consentPolicies -or $consentPolicies.Count -eq 0) -and (-not $hasLegacyConsent)
+            $AdminConsentEnabled = -not (-not $ConsentPolicies -or $ConsentPolicies.Count -eq 0) -and (-not $HasLegacyConsent)
             $Settings.Add([PSCustomObject]@{
                     Category         = 'ApplicationConsent'
                     SettingName      = 'Admin consent workflow'
-                    CurrentValue     = if ($adminConsentEnabled) { 'Configured' } else { 'Not configured' }
+                    CurrentValue     = if ($AdminConsentEnabled) { 'Configured' } else { 'Not configured' }
                     RecommendedValue = 'Configured'
-                    RiskLevel        = if (-not $adminConsentEnabled) { 'Medium' } else { 'Low' }
+                    RiskLevel        = if (-not $AdminConsentEnabled) { 'Medium' } else { 'Low' }
                     Description      = 'Indicates whether an admin consent workflow is effectively in place for application permissions.'
                     Recommendation   = 'Enable admin consent workflow so users can request access to apps they cannot consent to themselves.'
                 })
 
             # Build report output
-            $settingsByCategory = @{}
-            $settingsByRisk = @{ High = @(); Medium = @(); Low = @(); Info = @() }
+            $SettingsByCategory = @{}
+            $SettingsByRisk = @{ High = @(); Medium = @(); Low = @(); Info = @() }
 
-            foreach ($setting in $Settings) {
-                if (-not $settingsByCategory.ContainsKey($setting.Category)) {
-                    $settingsByCategory[$setting.Category] = [System.Collections.Generic.List[PSCustomObject]]::new()
+            foreach ($Setting in $Settings) {
+                if (-not $SettingsByCategory.ContainsKey($Setting.Category)) {
+                    $SettingsByCategory[$Setting.Category] = [System.Collections.Generic.List[PSCustomObject]]::new()
                 }
-                $settingsByCategory[$setting.Category].Add($setting)
-                $settingsByRisk[$setting.RiskLevel] += $setting
+                $SettingsByCategory[$Setting.Category].Add($Setting)
+                $SettingsByRisk[$Setting.RiskLevel] += $Setting
             }
 
-            $summary = [PSCustomObject]@{
+            $Summary = [PSCustomObject]@{
                 TenantId            = $TenantId
                 ReportGeneratedDate = Get-Date
                 TotalSettings       = $Settings.Count
-                HighRiskCount       = @($settingsByRisk.High).Count
-                MediumRiskCount     = @($settingsByRisk.Medium).Count
-                LowRiskCount        = @($settingsByRisk.Low).Count
-                InfoCount           = @($settingsByRisk.Info).Count
+                HighRiskCount       = @($SettingsByRisk.High).Count
+                MediumRiskCount     = @($SettingsByRisk.Medium).Count
+                LowRiskCount        = @($SettingsByRisk.Low).Count
+                InfoCount           = @($SettingsByRisk.Info).Count
             }
 
-            Write-Information "Tenant configuration (common misconfigurations) assessment completed." -InformationAction Continue
+            Write-Information 'Tenant configuration (common misconfigurations) assessment completed.' -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
-                Summary            = $summary
+                Summary            = $Summary
                 Settings           = $Settings.ToArray()
-                SettingsByCategory = $settingsByCategory
-                SettingsByRisk     = $settingsByRisk
+                SettingsByCategory = $SettingsByCategory
+                SettingsByRisk     = $SettingsByRisk
             }
         } catch {
-            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+            $ErrorRecord = [System.Management.Automation.ErrorRecord]::new(
                 [System.Exception]::new("Get-TntConfigurationReport failed: $($_.Exception.Message)", $_.Exception),
                 'GetTntTenantConfigurationReportError',
                 [System.Management.Automation.ErrorCategory]::OperationStopped,
                 $TenantId
             )
-            $PSCmdlet.ThrowTerminatingError($errorRecord)
+            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
         } finally {
             if ($ConnectionInfo.ShouldDisconnect) {
                 Disconnect-TntGraphSession -ConnectionState $ConnectionInfo

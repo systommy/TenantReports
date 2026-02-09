@@ -114,7 +114,7 @@ function Get-TntConditionalAccessReport {
         try {
             # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
-            $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
+            $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
             # Retrieve all Conditional Access policies
             Write-Verbose 'Retrieving Conditional Access policies...'
@@ -145,14 +145,14 @@ function Get-TntConditionalAccessReport {
 
             # Collect all unique GUIDs from policies for batch resolution
             Write-Verbose 'Collecting GUIDs for name resolution...'
-            $AllUserIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $AllUserIds  = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
             $AllGroupIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            $AllAppIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            $AllRoleIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $AllAppIds   = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $AllRoleIds  = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
             # Special values that should not be resolved
-            $SpecialUserValues = @('All', 'None', 'GuestsOrExternalUsers')
-            $SpecialAppValues = @('All', 'None', 'Office365', 'MicrosoftAdminPortals')
+            $SpecialUserValues     = @('All', 'None', 'GuestsOrExternalUsers')
+            $SpecialAppValues      = @('All', 'None', 'Office365', 'MicrosoftAdminPortals')
             $SpecialLocationValues = @('All', 'AllTrusted', 'None', '00000000-0000-0000-0000-000000000000')
 
             # GUID pattern for validation
@@ -288,28 +288,28 @@ function Get-TntConditionalAccessReport {
 
             foreach ($Policy in $PoliciesToAnalyze) {
                 # Analyze conditions
-                $Conditions = $Policy.Conditions
-                $IncludedUsersRaw = @()
-                $ExcludedUsersRaw = @()
-                $IncludedGroupsRaw = @()
-                $ExcludedGroupsRaw = @()
-                $IncludedAppsRaw = @()
-                $ExcludedAppsRaw = @()
+                $Conditions           = $Policy.Conditions
+                $IncludedUsersRaw     = @()
+                $ExcludedUsersRaw     = @()
+                $IncludedGroupsRaw    = @()
+                $ExcludedGroupsRaw    = @()
+                $IncludedAppsRaw      = @()
+                $ExcludedAppsRaw      = @()
                 $IncludedLocationsRaw = @()
                 $ExcludedLocationsRaw = @()
-                $IncludedRolesRaw = @()
-                $ExcludedRolesRaw = @()
-                $Platforms = @()
-                $ClientAppTypes = @()
+                $IncludedRolesRaw     = @()
+                $ExcludedRolesRaw     = @()
+                $Platforms            = @()
+                $ClientAppTypes       = @()
 
                 # Process user conditions
                 if ($Conditions.Users) {
-                    $IncludedUsersRaw = $Conditions.Users.IncludeUsers ?? @()
-                    $ExcludedUsersRaw = $Conditions.Users.ExcludeUsers ?? @()
+                    $IncludedUsersRaw  = $Conditions.Users.IncludeUsers ?? @()
+                    $ExcludedUsersRaw  = $Conditions.Users.ExcludeUsers ?? @()
                     $IncludedGroupsRaw = $Conditions.Users.IncludeGroups ?? @()
                     $ExcludedGroupsRaw = $Conditions.Users.ExcludeGroups ?? @()
-                    $IncludedRolesRaw = $Conditions.Users.IncludeRoles ?? @()
-                    $ExcludedRolesRaw = $Conditions.Users.ExcludeRoles ?? @()
+                    $IncludedRolesRaw  = $Conditions.Users.IncludeRoles ?? @()
+                    $ExcludedRolesRaw  = $Conditions.Users.ExcludeRoles ?? @()
                 }
 
                 # Process application conditions
@@ -335,33 +335,33 @@ function Get-TntConditionalAccessReport {
                 }
 
                 # Resolve GUIDs to display names
-                $IncludedUsers = @($IncludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
-                $ExcludedUsers = @($ExcludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
-                $IncludedGroups = @($IncludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
-                $ExcludedGroups = @($ExcludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
-                $IncludedApps = @($IncludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
-                $ExcludedApps = @($ExcludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
+                $IncludedUsers     = @($IncludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
+                $ExcludedUsers     = @($ExcludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
+                $IncludedGroups    = @($IncludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
+                $ExcludedGroups    = @($ExcludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
+                $IncludedApps      = @($IncludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
+                $ExcludedApps      = @($ExcludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
                 $IncludedLocations = @($IncludedLocationsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues } | Where-Object { $_ })
                 $ExcludedLocations = @($ExcludedLocationsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues } | Where-Object { $_ })
-                $IncludedRoles = @($IncludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
-                $ExcludedRoles = @($ExcludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
+                $IncludedRoles     = @($IncludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
+                $ExcludedRoles     = @($ExcludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
 
                 # Analyze grant controls
-                $GrantControls = $Policy.GrantControls
-                $RequiresMfa = $false
+                $GrantControls           = $Policy.GrantControls
+                $RequiresMfa             = $false
                 $RequiresCompliantDevice = $false
-                $RequiresHybridJoin = $false
-                $RequiresApprovedApp = $false
-                $BlockAccess = $false
-                $RequiresPasswordChange = $false
+                $RequiresHybridJoin      = $false
+                $RequiresApprovedApp     = $false
+                $BlockAccess             = $false
+                $RequiresPasswordChange  = $false
 
                 if ($GrantControls) {
-                    $RequiresMfa = ('mfa' -in $GrantControls.BuiltInControls) -or ('Multifactor authentication' -in $GrantControls.AuthenticationStrength.DisplayName)
+                    $RequiresMfa             = ('mfa' -in $GrantControls.BuiltInControls) -or ('Multifactor authentication' -in $GrantControls.AuthenticationStrength.DisplayName)
                     $RequiresCompliantDevice = 'compliantDevice' -in $GrantControls.BuiltInControls
-                    $RequiresHybridJoin = 'domainJoinedDevice' -in $GrantControls.BuiltInControls
-                    $RequiresApprovedApp = 'approvedApplication' -in $GrantControls.BuiltInControls
-                    $BlockAccess = 'block' -in $GrantControls.BuiltInControls
-                    $RequiresPasswordChange = 'passwordChange' -in $GrantControls.BuiltInControls
+                    $RequiresHybridJoin      = 'domainJoinedDevice' -in $GrantControls.BuiltInControls
+                    $RequiresApprovedApp     = 'approvedApplication' -in $GrantControls.BuiltInControls
+                    $BlockAccess             = 'block' -in $GrantControls.BuiltInControls
+                    $RequiresPasswordChange  = 'passwordChange' -in $GrantControls.BuiltInControls
                 }
 
                 # Determine policy type/scenario (use raw values for logic)
@@ -469,7 +469,6 @@ function Get-TntConditionalAccessReport {
 
             Write-Information "Conditional Access policy analysis completed - $($PoliciesToAnalyze.Count) policies analyzed" -InformationAction Continue
 
-            # Build report object
             [PSCustomObject]@{
                 Summary          = $Summary
                 PolicyAnalysis   = $PolicyAnalysis | Sort-Object State, PolicyName

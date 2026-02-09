@@ -172,7 +172,6 @@ function Get-TntDefenderIncidentReport {
                 } else { @{} }
             }
 
-            # Return the report object
             Write-Information "Defender incidents report completed - $($Summary.TotalIncidents) incidents found" -InformationAction Continue
 
             [PSCustomObject]@{
