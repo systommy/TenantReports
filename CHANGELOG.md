@@ -5,7 +5,8 @@ All notable changes to TenantReports will be documented in this file.
 ## 1.1.0 - 2026-02-10
 
 ### Added
-- Certificate authentication support for REST API connections (`Connect-TntGraphSession -ConnectionType RestApi`), enabling `Get-TntAzureSecureScoreReport` to work with certificate auth via JWT bearer assertion (RFC 7523)
+- Certificate authentication support
+- Certificate credential support in setup script (`New-TenantReportsAppRegistration.ps1`)
 - `CertificateThumbprint` parameter set on `Get-GraphToken` for token acquisition using client certificate credentials
 - JWT bearer assertion construction in `Get-GraphToken`: RSA-SHA256 signing, x5t/x5t#S256 thumbprint headers, secure memory cleanup
 - Certificate-specific troubleshooting guidance in token error messages

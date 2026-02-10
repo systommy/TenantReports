@@ -13,6 +13,7 @@
     - Creating new app registrations or updating existing ones
     - Automatic admin consent for all configured API permissions
     - Optional client secret generation with configurable expiration
+    - Optional certificate credential upload (existing or self-signed)
     - Optional Azure AD directory role assignment for Exchange Online management
     - Intelligent connection handling (reuses existing sessions when possible)
     - Idempotent permission grants (safe to re-run)
@@ -59,12 +60,33 @@
 .PARAMETER DirectoryRoles
     Array of directory role names to assign when -AssignDirectoryRoles is specified.
     Default: @('Exchange Administrator')
-    
+
     Common roles for security reporting:
     - 'Exchange Administrator' - Required for Exchange Online management
     - 'Security Administrator' - Access to security-related features
     - 'Security Reader' - Read-only access to security features
     - 'Global Reader' - Read-only access to all administrative features
+
+.PARAMETER CertificateThumbprint
+    Thumbprint of an existing certificate to upload to the app registration.
+    The certificate must exist in Cert:\CurrentUser\My or Cert:\LocalMachine\My.
+    Mutually exclusive with -CreateSelfSignedCertificate.
+
+.PARAMETER CreateSelfSignedCertificate
+    Switch parameter to create a new self-signed certificate and upload it to the app registration.
+    The certificate is created in Cert:\CurrentUser\My with RSA 2048-bit key and SHA256 hash.
+    Mutually exclusive with -CertificateThumbprint.
+
+.PARAMETER CertificateSubject
+    Subject name for the self-signed certificate.
+    Default: "CN=TenantReports"
+    Can only be used with -CreateSelfSignedCertificate.
+
+.PARAMETER CertificateExpirationMonths
+    Number of months until the self-signed certificate expires.
+    Valid range: 1-24 months.
+    Default: 24 months
+    Can only be used with -CreateSelfSignedCertificate.
 
 .EXAMPLE
     .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012"
@@ -101,6 +123,29 @@
     Creates an app registration and exports the results to a CSV file for documentation.
 
 .EXAMPLE
+    .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012" -CertificateThumbprint "A1B2C3D4E5F6..."
+
+    Creates an app registration and uploads an existing certificate from the local certificate store.
+
+.EXAMPLE
+    .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012" -CreateSelfSignedCertificate
+
+    Creates an app registration and generates a self-signed certificate (CN=TenantReports, 24 months expiry)
+    in Cert:\CurrentUser\My, then uploads it to the app registration.
+
+.EXAMPLE
+    .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012" -CreateSelfSignedCertificate -CertificateSubject "CN=Contoso-Reports" -CertificateExpirationMonths 12
+
+    Creates an app registration with a self-signed certificate using a custom subject name
+    and 12-month expiration.
+
+.EXAMPLE
+    .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012" -CreateClientSecret -CreateSelfSignedCertificate
+
+    Creates an app registration with both a client secret and a self-signed certificate,
+    allowing users to choose either authentication method.
+
+.EXAMPLE
     .\New-TenantReportsAppRegistration.ps1 -TenantId "12345678-1234-1234-1234-123456789012" -WhatIf
 
     Shows what actions would be performed without making any changes.
@@ -118,6 +163,8 @@
         - ServicePrincipal: The Service Principal Object ID
         - ClientSecret: The client secret value (if created)
         - SecretExpires: Client secret expiration date (if created)
+        - CertificateThumbprint: The certificate thumbprint (if uploaded)
+        - CertificateExpires: Certificate expiration date (if uploaded)
         - GraphPermissions: Count of granted/total Graph permissions
         - ExoPermissions: Count of granted/total Exchange Online permissions
         - DirectoryRoles: Comma-separated list of assigned directory roles
@@ -179,12 +226,39 @@ param(
     [switch]$AssignDirectoryRoles,
 
     [Parameter(ValueFromPipelineByPropertyName = $true)]
-    [string[]]$DirectoryRoles = @('Exchange Administrator')
+    [string[]]$DirectoryRoles = @('Exchange Administrator'),
+
+    [Parameter(ValueFromPipelineByPropertyName = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$CertificateThumbprint,
+
+    [Parameter(ValueFromPipelineByPropertyName = $true)]
+    [switch]$CreateSelfSignedCertificate,
+
+    [Parameter(ValueFromPipelineByPropertyName = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$CertificateSubject = 'CN=TenantReports',
+
+    [Parameter(ValueFromPipelineByPropertyName = $true)]
+    [ValidateRange(1, 24)]
+    [int]$CertificateExpirationMonths = 24
 )
 
 begin {
     Set-StrictMode -Version Latest
     $ErrorActionPreference = 'Stop'
+
+    if ($CertificateThumbprint -and $CreateSelfSignedCertificate) {
+        throw '-CertificateThumbprint and -CreateSelfSignedCertificate are mutually exclusive.'
+    }
+    if (-not $CreateSelfSignedCertificate) {
+        if ($PSBoundParameters.ContainsKey('CertificateSubject')) {
+            throw '-CertificateSubject can only be used with -CreateSelfSignedCertificate.'
+        }
+        if ($PSBoundParameters.ContainsKey('CertificateExpirationMonths')) {
+            throw '-CertificateExpirationMonths can only be used with -CreateSelfSignedCertificate.'
+        }
+    }
 
     $GraphAppId = '00000003-0000-0000-c000-000000000000'
     $ExoAppId   = '00000002-0000-0ff1-ce00-000000000000'
@@ -286,6 +360,72 @@ process {
     }
     #endregion
 
+    #region Certificate
+    $CertificateInfo = $null
+    if ($CreateSelfSignedCertificate -and $PSCmdlet.ShouldProcess('Self-Signed Certificate', 'Create')) {
+        Write-Host '[*] Creating self-signed certificate...' -ForegroundColor Cyan
+
+        $CertParams = @{
+            Subject           = $CertificateSubject
+            CertStoreLocation = 'Cert:\CurrentUser\My'
+            KeyExportPolicy   = 'Exportable'
+            KeySpec           = 'Signature'
+            KeyLength         = 2048
+            KeyAlgorithm      = 'RSA'
+            HashAlgorithm     = 'SHA256'
+            NotAfter          = (Get-Date).AddMonths($CertificateExpirationMonths)
+        }
+        $Certificate = New-SelfSignedCertificate @CertParams
+
+        $CertificateInfo = @{
+            Thumbprint = $Certificate.Thumbprint
+            Expires    = $Certificate.NotAfter
+        }
+    }
+    elseif ($CertificateThumbprint) {
+        # Normalize thumbprint: remove whitespace, uppercase
+        $NormalizedThumbprint = ($CertificateThumbprint -replace '\s', '').ToUpperInvariant()
+
+        # Find certificate in local stores
+        $Certificate = $null
+        foreach ($StoreLocation in @('CurrentUser', 'LocalMachine')) {
+            $CertPath = "Cert:\$StoreLocation\My\$NormalizedThumbprint"
+            $Certificate = Get-Item -Path $CertPath -ErrorAction SilentlyContinue
+            if ($Certificate) {
+                Write-Host "[*] Found certificate in $StoreLocation store" -ForegroundColor Cyan
+                break
+            }
+        }
+
+        if (-not $Certificate) {
+            throw "Certificate with thumbprint '$NormalizedThumbprint' not found in Cert:\CurrentUser\My or Cert:\LocalMachine\My."
+        }
+
+        $CertificateInfo = @{
+            Thumbprint = $Certificate.Thumbprint
+            Expires    = $Certificate.NotAfter
+        }
+    }
+
+    # Upload public key to app registration
+    if ($CertificateInfo -and $PSCmdlet.ShouldProcess('Certificate Key Credential', 'Upload to App Registration')) {
+        Write-Host '[*] Uploading certificate to app registration...' -ForegroundColor Cyan
+
+        $KeyCredential = @{
+            Type               = 'AsymmetricX509Cert'
+            Usage              = 'Verify'
+            Key                = $Certificate.RawData
+            DisplayName        = $Certificate.Subject
+            StartDateTime      = $Certificate.NotBefore
+            EndDateTime        = $Certificate.NotAfter
+        }
+        Update-MgApplication -ApplicationId $App.Id -KeyCredentials @($KeyCredential)
+
+        Write-Host '[+] Certificate uploaded: ' -ForegroundColor Green -NoNewline
+        Write-Host $CertificateInfo.Thumbprint -ForegroundColor White
+    }
+    #endregion
+
     #region Grant Permissions
     $GrantResults = @{
         Graph    = @{ Granted = 0; Failed = 0 }
@@ -381,8 +521,10 @@ process {
         ObjectId         = $App.Id
         TenantId         = $TenantId
         ServicePrincipal = $Sp.Id
-        ClientSecret     = if ($Secret) { $Secret.SecretText } else { $null }
-        SecretExpires    = if ($Secret) { $Secret.EndDateTime } else { $null }
+        ClientSecret          = if ($Secret) { $Secret.SecretText } else { $null }
+        SecretExpires         = if ($Secret) { $Secret.EndDateTime } else { $null }
+        CertificateThumbprint = if ($CertificateInfo) { $CertificateInfo.Thumbprint } else { $null }
+        CertificateExpires    = if ($CertificateInfo) { $CertificateInfo.Expires } else { $null }
         GraphPermissions = "$($GrantResults.Graph.Granted)/$($Permissions[$GraphAppId].Count)"
         ExoPermissions   = "$($GrantResults.Exchange.Granted)/$($Permissions[$ExoAppId].Count)"
         DirectoryRoles   = if ($RoleResults.Assigned) { $RoleResults.Assigned -join ', ' } else { $null }
@@ -390,6 +532,19 @@ process {
 
     if ($Secret) {
         Write-Host "`n[!] SAVE YOUR SECRET NOW - it won't be shown again!" -ForegroundColor Yellow -BackgroundColor DarkRed
+    }
+
+    if ($CertificateInfo -and $CreateSelfSignedCertificate) {
+        Write-Host "`n[!] Self-signed certificate created:" -ForegroundColor Yellow
+        Write-Host "    Thumbprint : $($CertificateInfo.Thumbprint)" -ForegroundColor Yellow
+        Write-Host "    Expires    : $($CertificateInfo.Expires)" -ForegroundColor Yellow
+        Write-Host "    Store      : Cert:\CurrentUser\My" -ForegroundColor Yellow
+        Write-Host "    Remember to export the certificate (.pfx) for backup or deployment to other machines." -ForegroundColor Yellow
+    }
+    elseif ($CertificateInfo) {
+        Write-Host "`n[+] Existing certificate uploaded:" -ForegroundColor Green
+        Write-Host "    Thumbprint : $($CertificateInfo.Thumbprint)" -ForegroundColor Green
+        Write-Host "    Expires    : $($CertificateInfo.Expires)" -ForegroundColor Green
     }
     #endregion
 }

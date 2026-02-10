@@ -33,7 +33,7 @@ A browser window opens for sign-in. The module handles permissions, authenticati
 - **One command** (`Invoke-TntReport`) runs everything and consolidates results
 - **Flexible output** — pipe to JSON, CSV, or use directly in scripts
 - **Graceful error handling** — missing permissions or disabled features won't break your report; affected sections return warnings while everything else continues
-- **Multiple auth methods** — interactive sign-in for quick runs, app registration for automation
+- **Multiple auth methods** — interactive sign-in for quick runs, client secret or certificate for automation
 
 ### Interactive Mode Limitations
 
@@ -120,20 +120,38 @@ Interactive mode is great for ad-hoc reports. For scheduled or unattended runs, 
 The module includes a setup script that creates and configures everything:
 
 ```powershell
+# With client secret
 .\Setup\New-TenantReportsAppRegistration.ps1 -TenantId "your-tenant-id" -CreateClientSecret -AssignDirectoryRoles
+
+# With a new self-signed certificate
+.\Setup\New-TenantReportsAppRegistration.ps1 -TenantId "your-tenant-id" -CreateSelfSignedCertificate -AssignDirectoryRoles
+
+# With an existing certificate
+.\Setup\New-TenantReportsAppRegistration.ps1 -TenantId "your-tenant-id" -CertificateThumbprint "your-thumbprint" -AssignDirectoryRoles
+
+# Both client secret and certificate
+.\Setup\New-TenantReportsAppRegistration.ps1 -TenantId "your-tenant-id" -CreateClientSecret -CreateSelfSignedCertificate -AssignDirectoryRoles
 ```
 
-This creates an app registration with all required permissions, grants admin consent, and outputs a client secret.
+This creates an app registration with all required permissions, grants admin consent, and configures the chosen credential type.
 
-> **Save the output!** The client secret is only displayed once.
+> **Save the output!** The client secret is only displayed once. For self-signed certificates, remember to export the `.pfx` for backup.
 
 ### Running Automated Reports
 
 ```powershell
+# Using client secret
 $ReportParams = @{
     TenantId     = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
     ClientId     = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
     ClientSecret = ConvertTo-SecureString 'your-secret' -AsPlainText -Force
+}
+
+# Or using certificate
+$ReportParams = @{
+    TenantId              = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    ClientId              = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    CertificateThumbprint = 'your-certificate-thumbprint'
 }
 
 $Report = Invoke-TntReport @ReportParams
@@ -237,6 +255,7 @@ $Modules | ForEach-Object { Install-Module $_ -Scope CurrentUser -Force }
 |-------|----------|
 | `AADSTS700016: Application not found` | Verify ClientId matches your app registration |
 | `AADSTS7000215: Invalid client secret` | Secret may be expired—create a new one in Azure Portal |
+| `Certificate not found` | Verify the thumbprint and that the certificate exists in `Cert:\CurrentUser\My` or `Cert:\LocalMachine\My` |
 | `Insufficient privileges` | Grant admin consent for all API permissions |
 
 ## Contributing
