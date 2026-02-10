@@ -17,6 +17,11 @@ function Get-GraphToken {
     .PARAMETER ClientSecret
         The client secret for the Azure AD app registration.
 
+    .PARAMETER CertificateThumbprint
+        The thumbprint of a certificate installed in the local certificate store (Cert:\CurrentUser\My or
+        Cert:\LocalMachine\My) for certificate-based authentication. The certificate must have a private key
+        and use an RSA key pair. Used to build a JWT bearer assertion for the OAuth2 client credentials flow.
+
     .PARAMETER Scope
         The target service scope. Supports predefined values (Graph, Teams, Exchange, Partner, Azure)
         or direct scope URIs (e.g., 'https://management.azure.com/.default').
@@ -28,6 +33,14 @@ function Get-GraphToken {
     .EXAMPLE
         $ArmToken = Get-GraphToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scope Azure
         Retrieves an Azure Resource Manager access token.
+
+    .EXAMPLE
+        $Token = Get-GraphToken -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $Thumbprint -Scope Graph
+        Retrieves a Microsoft Graph access token using certificate authentication.
+
+    .EXAMPLE
+        $ArmToken = Get-GraphToken -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $Thumbprint -Scope Azure
+        Retrieves an Azure Resource Manager access token using certificate authentication.
 
     .EXAMPLE
         $CustomToken = Get-GraphToken -TenantId $TenantId -ClientId $ClientId -ClientSecret $ClientSecret -Scope 'https://vault.azure.net/.default'
@@ -58,12 +71,14 @@ function Get-GraphToken {
     [OutputType([System.Management.Automation.PSObject])]
     param (
         [Parameter(Mandatory = $true, ParameterSetName = 'ClientCredentials')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'ManagedIdentity')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'ClientCredentials')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
         [Alias('ApplicationId')]
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
@@ -73,6 +88,10 @@ function Get-GraphToken {
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'Certificate')]
+        [ValidateNotNullOrEmpty()]
+        [string]$CertificateThumbprint,
 
         [Parameter(Mandatory = $true, ParameterSetName = 'ManagedIdentity')]
         [switch]$UseManagedIdentity,
@@ -127,6 +146,8 @@ function Get-GraphToken {
                 "$ScopeUri-Interactive"
             } elseif ($UseManagedIdentity) {
                 "$ScopeUri-ManagedIdentity"
+            } elseif ($CertificateThumbprint) {
+                "$ScopeUri-$ClientId-$TenantId-$CertificateThumbprint"
             } else {
                 "$ScopeUri-$ClientId-$TenantId"
             }
@@ -222,6 +243,143 @@ function Get-GraphToken {
                     )
                     $PSCmdlet.ThrowTerminatingError($errorRecord)
                 }
+            } elseif ($CertificateThumbprint) {
+                Write-Verbose 'Using Certificate authentication with JWT bearer assertion'
+
+                # Normalize thumbprint: remove whitespace, uppercase
+                $NormalizedThumbprint = ($CertificateThumbprint -replace '\s', '').ToUpperInvariant()
+
+                # Find certificate in local stores
+                $Certificate = $null
+                foreach ($StoreLocation in @('CurrentUser', 'LocalMachine')) {
+                    $CertPath = "Cert:\$StoreLocation\My\$NormalizedThumbprint"
+                    $Certificate = Get-Item -Path $CertPath -ErrorAction SilentlyContinue
+                    if ($Certificate) {
+                        Write-Verbose "Found certificate in $StoreLocation store"
+                        break
+                    }
+                }
+
+                if (-not $Certificate) {
+                    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                        [System.Exception]::new("Get-GraphToken failed: Certificate with thumbprint '$NormalizedThumbprint' not found in Cert:\CurrentUser\My or Cert:\LocalMachine\My."),
+                        'GetGraphTokenCertificateNotFoundError',
+                        [System.Management.Automation.ErrorCategory]::ObjectNotFound,
+                        $NormalizedThumbprint
+                    )
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
+                }
+
+                # Validate certificate has a private key
+                if (-not $Certificate.HasPrivateKey) {
+                    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                        [System.Exception]::new("Get-GraphToken failed: Certificate '$NormalizedThumbprint' does not have a private key. Import the certificate with the private key (.pfx) to use certificate authentication."),
+                        'GetGraphTokenCertificateNoPrivateKeyError',
+                        [System.Management.Automation.ErrorCategory]::SecurityError,
+                        $Certificate
+                    )
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
+                }
+
+                # Validate RSA key type
+                $RsaPrivateKey = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($Certificate)
+                if (-not $RsaPrivateKey) {
+                    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                        [System.Exception]::new("Get-GraphToken failed: Certificate '$NormalizedThumbprint' does not have an RSA private key. Only RSA certificates are supported for JWT bearer assertions."),
+                        'GetGraphTokenCertificateNotRsaError',
+                        [System.Management.Automation.ErrorCategory]::InvalidType,
+                        $Certificate
+                    )
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
+                }
+
+                $JwtAssertion = $null
+                try {
+                    # Build JWT header
+                    $CertHash = $Certificate.GetCertHash()
+                    $X5t = [Convert]::ToBase64String($CertHash) -replace '\+', '-' -replace '/', '_' -replace '='
+
+                    $JwtHeader = @{
+                        alg = 'RS256'
+                        typ = 'JWT'
+                        x5t = $X5t
+                    }
+
+                    # Add x5t#S256 if SHA-256 hash is available
+                    $CertHashSha256 = $Certificate.GetCertHash([System.Security.Cryptography.HashAlgorithmName]::SHA256)
+                    if ($CertHashSha256) {
+                        $X5tS256 = [Convert]::ToBase64String($CertHashSha256) -replace '\+', '-' -replace '/', '_' -replace '='
+                        $JwtHeader['x5t#S256'] = $X5tS256
+                    }
+
+                    # Build JWT claims
+                    $TokenEndpoint = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+                    $Now = [DateTimeOffset]::UtcNow
+                    $JwtClaims = @{
+                        aud = $TokenEndpoint
+                        iss = $ClientId
+                        sub = $ClientId
+                        jti = [Guid]::NewGuid().ToString()
+                        nbf = $Now.ToUnixTimeSeconds()
+                        exp = $Now.AddMinutes(10).ToUnixTimeSeconds()
+                    }
+
+                    # Encode header and claims
+                    $EncodedHeader = [Convert]::ToBase64String(
+                        [System.Text.Encoding]::UTF8.GetBytes(($JwtHeader | ConvertTo-Json -Compress))
+                    ) -replace '\+', '-' -replace '/', '_' -replace '='
+                    $EncodedClaims = [Convert]::ToBase64String(
+                        [System.Text.Encoding]::UTF8.GetBytes(($JwtClaims | ConvertTo-Json -Compress))
+                    ) -replace '\+', '-' -replace '/', '_' -replace '='
+
+                    # Sign JWT with RSA-SHA256
+                    $DataToSign = [System.Text.Encoding]::UTF8.GetBytes("$EncodedHeader.$EncodedClaims")
+                    $Signature = $RsaPrivateKey.SignData(
+                        $DataToSign,
+                        [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                        [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+                    )
+                    $EncodedSignature = [Convert]::ToBase64String($Signature) -replace '\+', '-' -replace '/', '_' -replace '='
+
+                    $JwtAssertion = "$EncodedHeader.$EncodedClaims.$EncodedSignature"
+
+                    # POST to token endpoint with JWT bearer assertion
+                    $AuthBody = @{
+                        client_id             = $ClientId
+                        scope                 = $ScopeUri
+                        grant_type            = 'client_credentials'
+                        client_assertion_type = 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+                        client_assertion      = $JwtAssertion
+                    }
+
+                    $TokenUri = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token"
+
+                    try {
+                        $TokenRequest = Invoke-RestMethod -Method Post -Uri $TokenUri -Body $AuthBody -ContentType 'application/x-www-form-urlencoded' -ErrorAction Stop
+                    } catch {
+                        $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                            [System.Exception]::new("Get-GraphToken failed to obtain token using Certificate authentication: $($_.Exception.Message)", $_.Exception),
+                            'GetGraphTokenCertificateError',
+                            [System.Management.Automation.ErrorCategory]::AuthenticationError,
+                            $null
+                        )
+                        $PSCmdlet.ThrowTerminatingError($errorRecord)
+                    }
+                } finally {
+                    # Clear JWT strings from memory
+                    $JwtAssertion = $null
+                    if ($AuthBody) {
+                        $AuthBody.Clear()
+                    }
+                    $EncodedHeader = $null
+                    $EncodedClaims = $null
+                    $EncodedSignature = $null
+                    $DataToSign = $null
+                    if ($RsaPrivateKey -is [System.IDisposable]) {
+                        $RsaPrivateKey.Dispose()
+                    }
+                }
+
             } else {
                 Write-Verbose 'Using Client Credentials for authentication'
 
@@ -398,6 +556,19 @@ For Microsoft Graph scope:
 - Admin consent must be granted for all permissions
 - Check permissions in Azure Portal: App registrations > API permissions
 '@
+            }
+
+            if ($CertificateThumbprint) {
+                $TroubleshootingGuidance += @"
+
+CERTIFICATE-SPECIFIC TROUBLESHOOTING:
+- Verify the certificate is installed: Get-ChildItem Cert:\CurrentUser\My\$($CertificateThumbprint)
+- Check LocalMachine store: Get-ChildItem Cert:\LocalMachine\My\$($CertificateThumbprint)
+- Ensure the certificate has a private key (.pfx import)
+- Verify the certificate is uploaded to the app registration in Azure Portal
+- Check certificate expiration: (Get-Item Cert:\CurrentUser\My\$($CertificateThumbprint)).NotAfter
+- Ensure the certificate uses RSA key pair (EC keys are not supported)
+"@
             }
 
             $TroubleshootingGuidance += @"

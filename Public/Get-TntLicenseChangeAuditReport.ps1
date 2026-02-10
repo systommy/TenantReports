@@ -224,7 +224,7 @@ function Get-TntLicenseChangeAuditReport {
                 MostChangedUsers    = $MostChangedUsers
             }
 
-            Write-Information "License change audit completed - $($Changes.Count) changes found across $($Summary.UniqueUsersAffected) users." -InformationAction Continue
+            Write-Information "License change audit completed - $($Changes.Count) changes found." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary = $Summary

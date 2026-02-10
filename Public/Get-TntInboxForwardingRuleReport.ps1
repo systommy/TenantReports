@@ -4,7 +4,7 @@ function Get-TntInboxForwardingRuleReport {
         Reports on inbox forwarding rules targeting external addresses.
 
     .DESCRIPTION
-        Retrieves all user mailboxes and checks inbox rules for forwarding to external recipients.
+        Retrieves all user and shared mailboxes and checks inbox rules for forwarding to external recipients.
         External addresses are determined by comparing against the tenant's accepted domains.
 
     .PARAMETER TenantId
@@ -86,7 +86,7 @@ function Get-TntInboxForwardingRuleReport {
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
-            # Connect to Exchange Online
+            # Connect to Exchange Online (required - throw on failure)
             try {
                 if ($PSCmdlet.ParameterSetName -eq 'ClientSecret') {
                     $TokenParams = @{
@@ -98,7 +98,30 @@ function Get-TntInboxForwardingRuleReport {
                     $ExchangeToken = Get-GraphToken @TokenParams
                     Connect-ExchangeOnline -Organization $TenantId -AccessToken $ExchangeToken.AccessToken -ShowBanner:$false -ErrorAction Stop
                 } else {
-                    Connect-ExchangeOnline -AppId $ClientId -CertificateThumbprint $CertificateThumbprint -Organization $TenantId -ShowBanner:$false -ErrorAction Stop
+                    # Certificate auth requires domain name, not GUID
+                    $TenantDomain = $null
+                    try {
+                        $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
+                        if ($Org.VerifiedDomains) {
+                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            if (-not $TenantDomain) {
+                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "Could not resolve tenant domain: $($_.Exception.Message)"
+                    }
+
+                    if (-not $TenantDomain) {
+                        $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new(
+                                [System.Exception]::new('Could not resolve tenant domain name. Certificate authentication requires a domain name for Exchange Online, not a tenant GUID.'),
+                                'ExchangeTenantDomainResolutionError',
+                                [System.Management.Automation.ErrorCategory]::ObjectNotFound,
+                                $TenantId
+                            ))
+                    }
+
+                    Connect-ExchangeOnline -AppId $ClientId -CertificateThumbprint $CertificateThumbprint -Organization $TenantDomain -ShowBanner:$false -ErrorAction Stop
                 }
                 Write-Verbose 'Successfully connected to Exchange Online.'
             } catch {
@@ -116,14 +139,15 @@ function Get-TntInboxForwardingRuleReport {
             Write-Verbose 'Retrieving accepted domains...'
             $AcceptedDomains = (Get-AcceptedDomain).DomainName
 
-            # Get all user mailboxes
-            Write-Verbose 'Retrieving user mailboxes...'
-            $UserMailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties UserPrincipalName, DisplayName
+            # Get all user and shared mailboxes
+            Write-Verbose 'Retrieving mailboxes...'
+            $Mailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties UserPrincipalName, DisplayName, RecipientTypeDetails |
+                Where-Object { $_.RecipientTypeDetails -in @('UserMailbox', 'SharedMailbox') }
 
-            Write-Verbose "Checking inbox rules for $($UserMailboxes.Count) mailboxes..."
+            Write-Verbose "Checking inbox rules for $($Mailboxes.Count) mailboxes..."
             $TotalRulesChecked = 0
 
-            foreach ($Mbx in $UserMailboxes) {
+            foreach ($Mbx in $Mailboxes) {
                 try {
                     $Rules = Get-InboxRule -Mailbox $Mbx.UserPrincipalName -ErrorAction SilentlyContinue -WarningAction SilentlyContinue
                     if (-not $Rules) { continue }
@@ -180,7 +204,7 @@ function Get-TntInboxForwardingRuleReport {
             $Summary = [PSCustomObject]@{
                 TenantId                = $TenantId
                 ReportGeneratedDate     = Get-Date
-                TotalMailboxesChecked   = $UserMailboxes.Count
+                TotalMailboxesChecked   = $Mailboxes.Count
                 TotalRulesChecked       = $TotalRulesChecked
                 ExternalForwardsFound   = $ForwardingRules.Count
                 EnabledExternalForwards = $EnabledForwards.Count
@@ -188,7 +212,7 @@ function Get-TntInboxForwardingRuleReport {
                 ExternalDomains         = $UniqueExternalDomains
             }
 
-            Write-Information "Inbox forwarding analysis completed - $($ForwardingRules.Count) external forwarding rules found across $UniqueMailboxes mailboxes." -InformationAction Continue
+            Write-Information "Inbox forwarding analysis completed - checked $($Mailboxes.Count) mailboxes, found $($ForwardingRules.Count) external forwarding rules." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary         = $Summary

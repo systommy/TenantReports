@@ -88,7 +88,7 @@ function Get-TntSharedMailboxComplianceReport {
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
-            # Connect to Exchange Online
+            # Connect to Exchange Online (required - throw on failure)
             try {
                 if ($PSCmdlet.ParameterSetName -eq 'ClientSecret') {
                     $TokenParams = @{
@@ -100,7 +100,30 @@ function Get-TntSharedMailboxComplianceReport {
                     $ExchangeToken = Get-GraphToken @TokenParams
                     Connect-ExchangeOnline -Organization $TenantId -AccessToken $ExchangeToken.AccessToken -ShowBanner:$false -ErrorAction Stop
                 } else {
-                    Connect-ExchangeOnline -AppId $ClientId -CertificateThumbprint $CertificateThumbprint -Organization $TenantId -ShowBanner:$false -ErrorAction Stop
+                    # Certificate auth requires domain name, not GUID
+                    $TenantDomain = $null
+                    try {
+                        $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
+                        if ($Org.VerifiedDomains) {
+                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            if (-not $TenantDomain) {
+                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                            }
+                        }
+                    } catch {
+                        Write-Verbose "Could not resolve tenant domain: $($_.Exception.Message)"
+                    }
+
+                    if (-not $TenantDomain) {
+                        $PSCmdlet.ThrowTerminatingError([System.Management.Automation.ErrorRecord]::new(
+                                [System.Exception]::new('Could not resolve tenant domain name. Certificate authentication requires a domain name for Exchange Online, not a tenant GUID.'),
+                                'ExchangeTenantDomainResolutionError',
+                                [System.Management.Automation.ErrorCategory]::ObjectNotFound,
+                                $TenantId
+                            ))
+                    }
+
+                    Connect-ExchangeOnline -AppId $ClientId -CertificateThumbprint $CertificateThumbprint -Organization $TenantDomain -ShowBanner:$false -ErrorAction Stop
                 }
                 Write-Verbose 'Successfully connected to Exchange Online.'
             } catch {

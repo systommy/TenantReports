@@ -48,6 +48,11 @@ function Connect-TntGraphSession {
         Establishes a Microsoft Graph connection using certificate authentication.
 
     .EXAMPLE
+        $ConnectionInfo = Connect-TntGraphSession -TenantId $TenantId -ClientId $ClientId -CertificateThumbprint $Thumbprint -Scope Azure -ConnectionType RestApi
+
+        Establishes an Azure Resource Manager REST API connection using certificate authentication with JWT bearer assertion.
+
+    .EXAMPLE
         $ConnectionInfo = Connect-TntGraphSession -Interactive
 
         Establishes an interactive Microsoft Graph connection using device code flow.
@@ -338,17 +343,23 @@ function Connect-TntGraphSession {
                 'RestApi' {
                     Write-Verbose "Establishing REST API token-based connection. Tenant ID: $($TenantId)"
 
-                    if ($PSCmdlet.ParameterSetName -eq 'Certificate') {
-                        throw 'Certificate authentication for REST API connections requires interactive flow. Use client secret for automation scenarios.'
-                    }
-
                     try {
-                        Write-Verbose 'Using Client Credentials authentication'
-                        $TokenParams = @{
-                            TenantId     = $TenantId
-                            ClientId     = $ClientId
-                            ClientSecret = $ClientSecret
-                            Scope        = $Scope
+                        if ($PSCmdlet.ParameterSetName -eq 'Certificate') {
+                            Write-Verbose 'Using Certificate authentication'
+                            $TokenParams = @{
+                                TenantId              = $TenantId
+                                ClientId              = $ClientId
+                                CertificateThumbprint = $CertificateThumbprint
+                                Scope                 = $Scope
+                            }
+                        } else {
+                            Write-Verbose 'Using Client Credentials authentication'
+                            $TokenParams = @{
+                                TenantId     = $TenantId
+                                ClientId     = $ClientId
+                                ClientSecret = $ClientSecret
+                                Scope        = $Scope
+                            }
                         }
 
                         $AccessTokenInfo = Get-GraphToken @TokenParams -ErrorAction Stop
