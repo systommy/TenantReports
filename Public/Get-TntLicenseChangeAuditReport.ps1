@@ -33,9 +33,6 @@ function Get-TntLicenseChangeAuditReport {
 
         Retrieves license change audit events from the last 90 days.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -81,7 +78,6 @@ function Get-TntLicenseChangeAuditReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -95,8 +91,8 @@ function Get-TntLicenseChangeAuditReport {
         $SkuHashTable = @{}
         $SkuTable = Get-SkuTranslationTable
         if ($SkuTable) {
-            $SkuTable | Group-Object GUID | ForEach-Object {
-                $SkuHashTable[$_.Name] = ($_.Group | Select-Object -First 1).Product_Display_Name
+            foreach ($SkuGroup in ($SkuTable | Group-Object GUID)) {
+                $SkuHashTable[$SkuGroup.Name] = ($SkuGroup.Group | Select-Object -First 1).Product_Display_Name
             }
         } else {
             Write-Verbose 'SKU Translation Table not available.'
@@ -113,7 +109,7 @@ function Get-TntLicenseChangeAuditReport {
             $Changes = [System.Collections.Generic.List[PSCustomObject]]::new()
 
             # Build filter date
-            $FilterDate = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $FilterDate = [datetime]::UtcNow.AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
             $Filter     = "activityDateTime ge $FilterDate and activityDisplayName eq 'Change user license'"
             $Uri        = "https://graph.microsoft.com/v1.0/auditLogs/directoryAudits?`$filter=$Filter&`$top=999"
 
@@ -137,7 +133,7 @@ function Get-TntLicenseChangeAuditReport {
                     # Skip Signup-initiated events
                     if ($InitiatedBy -eq 'Signup') { continue }
 
-                    $TargetUser         = $AuditEvent.targetResources | Where-Object { $_.type -eq 'User' } | Select-Object -First 1
+                    $TargetUser         = @($AuditEvent.targetResources).Where({ $_.type -eq 'User' }) | Select-Object -First 1
                     $ModifiedProperties = if ($TargetUser) { $TargetUser.modifiedProperties } else { @() }
 
                     $AddedLicenses   = @()
@@ -179,12 +175,12 @@ function Get-TntLicenseChangeAuditReport {
                             $RemovedSkuIds = & $ExtractSkuIds $Prop.oldValue
 
                             # Resolve SKU GUIDs to friendly names
-                            $AddedLicenses = @($AddedSkuIds | ForEach-Object {
+                            $AddedLicenses = @($AddedSkuIds.ForEach({
                                     Resolve-SkuName -SkuId $_ -SkuHashTable $SkuHashTable
-                                })
-                            $RemovedLicenses = @($RemovedSkuIds | ForEach-Object {
+                                }))
+                            $RemovedLicenses = @($RemovedSkuIds.ForEach({
                                     Resolve-SkuName -SkuId $_ -SkuHashTable $SkuHashTable
-                                })
+                                }))
                         }
                     }
 
@@ -206,14 +202,13 @@ function Get-TntLicenseChangeAuditReport {
                 $Uri = $Response.'@odata.nextLink'
             } while ($Uri)
 
-            # Build summary
             $UserChangeCounts = $Changes | Group-Object -Property UserPrincipal | Sort-Object Count -Descending
-            $MostChangedUsers = $UserChangeCounts | Select-Object -First 10 | ForEach-Object {
-                [PSCustomObject]@{
-                    UserPrincipalName = $_.Name
-                    ChangeCount       = $_.Count
-                }
-            }
+            $MostChangedUsers = ($UserChangeCounts | Select-Object -First 10).ForEach({
+                    [PSCustomObject]@{
+                        UserPrincipalName = $_.Name
+                        ChangeCount       = $_.Count
+                    }
+                })
 
             $Summary = [PSCustomObject]@{
                 TenantId            = $TenantId

@@ -39,9 +39,6 @@ function Get-TntM365RiskyUserReport {
 
         Returns report filtered for High risk users only.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
 
@@ -113,7 +110,7 @@ function Get-TntM365RiskyUserReport {
 
     begin {
         # Calculate start date
-        $StartDate = (Get-Date).AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
+        $StartDate = [datetime]::UtcNow.AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
         Write-Information "Starting risky users report generation for past $($DaysBack) days..." -InformationAction Continue
     }
 
@@ -140,7 +137,7 @@ function Get-TntM365RiskyUserReport {
             }
 
             if ($RiskLevel) {
-                $RiskLevelConditions    = $RiskLevel | ForEach-Object { "RiskLevel eq '$($_.ToLower())'" }
+                $RiskLevelConditions    = $RiskLevel.ForEach({ "RiskLevel eq '$($_.ToLower())'" })
                 $RiskLevelFilterString  = "($($RiskLevelConditions -join ' or '))"
                 $FilterParams.Filter   += " and $RiskLevelFilterString"
                 Write-Verbose "Filtering by riskLevel: $($RiskLevel -join ', ')"
@@ -234,8 +231,8 @@ function Get-TntM365RiskyUserReport {
 
             $Summary = [PSCustomObject]@{
                 TotalRiskyUsers                = if ($RiskyUsersReport) { $RiskyUsersReport.Count } else { 0 }
-                RiskyUsersConfirmedCompromised = if ($RiskyUsersReport) { ($RiskyUsersReport | Where-Object { $_.RiskDetail -eq 'UserConfirmedCompromised' }).Count } else { 0 }
-                RiskyUsersAtHighLevel          = if ($RiskyUsersReport) { ($RiskyUsersReport | Where-Object { $_.RiskLevel -eq 'High' }).Count } else { 0 }
+                RiskyUsersConfirmedCompromised = if ($RiskyUsersReport) { $RiskyUsersReport.Where({ $_.RiskDetail -eq 'UserConfirmedCompromised' }).Count } else { 0 }
+                RiskyUsersAtHighLevel          = if ($RiskyUsersReport) { $RiskyUsersReport.Where({ $_.RiskLevel -eq 'High' }).Count } else { 0 }
                 TotalRiskDetections            = if ($RiskDetectionsReport) { $RiskDetectionsReport.Count } else { 0 }
                 TotalRiskyServicePrincipals    = if ($RiskyServicePrincipalReport) { $RiskyServicePrincipalReport.Count } else { 0 }
             }

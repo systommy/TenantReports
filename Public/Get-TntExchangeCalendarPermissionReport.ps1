@@ -84,14 +84,12 @@ function Get-TntExchangeCalendarPermissionReport {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
@@ -99,26 +97,21 @@ function Get-TntExchangeCalendarPermissionReport {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Switch to include system and service accounts in the results.
         [Parameter()]
         [switch]$IncludeSystemAccounts,
 
-        # Switch to include Default and Anonymous permissions in the results.
         [Parameter()]
         [switch]$IncludeDefaultPermissions
     )
@@ -139,9 +132,8 @@ function Get-TntExchangeCalendarPermissionReport {
 
     process {
         try {
-            # Filter connection parameters
-            $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             # Establish or verify Microsoft Graph connection (needed for tenant domain resolution)
+            $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
             # Initialize results collection
@@ -164,9 +156,9 @@ function Get-TntExchangeCalendarPermissionReport {
                     try {
                         $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
                         if ($Org.VerifiedDomains) {
-                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name)
                             if (-not $TenantDomain) {
-                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                                $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name)
                             }
                         }
                     } catch {
@@ -198,18 +190,18 @@ function Get-TntExchangeCalendarPermissionReport {
             # Retrieve mailboxes via Exchange Online (better coverage than Graph users)
             Write-Verbose 'Retrieving mailboxes via Exchange Online...'
 
-            $TargetMailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties RecipientTypeDetails, PrimarySmtpAddress, DisplayName, UserPrincipalName | Where-Object {
+            $TargetMailboxes = (Get-EXOMailbox -ResultSize Unlimited -Properties RecipientTypeDetails, PrimarySmtpAddress, DisplayName, UserPrincipalName).Where({
                 $_.RecipientTypeDetails -in @('UserMailbox', 'SharedMailbox', 'RoomMailbox', 'EquipmentMailbox')
-            }
+            })
 
             if (-not $IncludeSystemAccounts) {
-                $TargetMailboxes = $TargetMailboxes | Where-Object {
+                $TargetMailboxes = $TargetMailboxes.Where({
                     $_.Name -notlike 'HealthMailbox*' -and
                     $_.Name -notlike 'SystemMailbox*' -and
                     $_.Name -notlike 'DiscoverySearchMailbox*' -and
                     $_.Name -notlike 'Migration.*' -and
                     $_.Name -notlike 'FederatedEmail.*'
-                }
+                })
             }
 
             # Use parallel processing for calendar permissions
@@ -226,11 +218,11 @@ function Get-TntExchangeCalendarPermissionReport {
                         if ($FolderPerms) {
                             # Filter out Default and Anonymous entries unless explicitly included
                             if (-not $using:IncludeDefaultPermissions) {
-                                $FolderPerms = $FolderPerms | Where-Object {
+                                $FolderPerms = @($FolderPerms.Where({
                                     $_.User.DisplayName -notin @('Default', 'Anonymous') -and
                                     $_.User.DisplayName -ne $_.FolderName -and
                                     $_.AccessRights -ne 'None'
-                                }
+                                }))
                             }
 
                             foreach ($Perm in $FolderPerms) {
@@ -274,7 +266,6 @@ function Get-TntExchangeCalendarPermissionReport {
                     })
             }
 
-            # Generate summary statistics
             $Summary = [PSCustomObject]@{
                 TotalPermissions         = $CalendarPermissions.Count
                 UniqueGrantees           = ($CalendarPermissions | Select-Object -ExpandProperty GrantedTo -Unique).Count
@@ -296,7 +287,6 @@ function Get-TntExchangeCalendarPermissionReport {
             )
             $PSCmdlet.ThrowTerminatingError($errorRecord)
         } finally {
-            # Cleanup connections
             try {
                 # Only disconnect if we established the connection
                 Disconnect-TntGraphSession -ConnectionState $ConnectionInfo | Out-Null
@@ -310,7 +300,3 @@ function Get-TntExchangeCalendarPermissionReport {
         }
     }
 }
-
-
-
-

@@ -44,9 +44,6 @@ function Get-TntIntuneDeviceComplianceReport {
 
         Generates a report focused on non-compliant Windows devices.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a comprehensive report object containing:
@@ -99,7 +96,6 @@ function Get-TntIntuneDeviceComplianceReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -154,7 +150,7 @@ function Get-TntIntuneDeviceComplianceReport {
             $ManagedDevices = Get-MgDeviceManagementManagedDevice -All -Top $MaxDevices -ErrorAction Stop
             Write-Verbose "Retrieved $($ManagedDevices.Count) managed devices"
 
-            # Pre-fetch all users ONCE before loo
+            # Pre-fetch all users ONCE before loop
             $UserCache = $null
             Write-Verbose 'Pre-fetching user data for device enrichment...'
             $CacheParams = @{
@@ -165,6 +161,9 @@ function Get-TntIntuneDeviceComplianceReport {
             }
             $UserCache = Get-CachedUsers @CacheParams
             Write-Verbose "User cache ready: $($UserCache.UserCount) users (CacheHit: $($UserCache.CacheHit))"
+
+            # Cache current time outside the loop to avoid repeated Get-Date calls
+            $Now = [datetime]::Now
 
             # Process each device for detailed compliance analysis
             $DeviceComplianceDetails = foreach ($Device in $ManagedDevices) {
@@ -189,14 +188,14 @@ function Get-TntIntuneDeviceComplianceReport {
 
                 # Calculate days since last sync
                 $DaysSinceLastSync = if ($Device.LastSyncDateTime) {
-                    [math]::Round(((Get-Date) - $Device.LastSyncDateTime).TotalDays, 1)
+                    [math]::Round(($Now - $Device.LastSyncDateTime).TotalDays, 1)
                 } else {
                     999
                 }
 
                 # Calculate enrollment age
                 $EnrollmentAge = if ($Device.EnrolledDateTime) {
-                    [math]::Round(((Get-Date) - $Device.EnrolledDateTime).TotalDays, 0)
+                    [math]::Round(($Now - $Device.EnrolledDateTime).TotalDays, 0)
                 } else {
                     0
                 }
@@ -408,13 +407,13 @@ function Get-TntIntuneDeviceComplianceReport {
                 Summary                 = $Summary
                 DeviceComplianceDetails = $DeviceComplianceDetails | Sort-Object RiskLevel, ComplianceState, Platform, DeviceName
                 ComplianceByRisk        = @{
-                    High   = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.RiskLevel -eq 'High' } } else { @() }
-                    Medium = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.RiskLevel -eq 'Medium' } } else { @() }
-                    Low    = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.RiskLevel -eq 'Low' } } else { @() }
+                    High   = if ($DeviceComplianceDetails) { @($DeviceComplianceDetails.Where({ $_.RiskLevel -eq 'High' })) } else { @() }
+                    Medium = if ($DeviceComplianceDetails) { @($DeviceComplianceDetails.Where({ $_.RiskLevel -eq 'Medium' })) } else { @() }
+                    Low    = if ($DeviceComplianceDetails) { @($DeviceComplianceDetails.Where({ $_.RiskLevel -eq 'Low' })) } else { @() }
                 }
-                NonCompliantDevices     = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.ComplianceState -eq 'noncompliant' } | Sort-Object RiskLevel -Descending } else { @() }
-                StaleDevicesList        = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.IsStaleDevice } | Sort-Object DaysSinceLastSync -Descending } else { @() }
-                RecentEnrollments       = if ($DeviceComplianceDetails) { $DeviceComplianceDetails | Where-Object { $_.IsRecentEnrollment } | Sort-Object EnrolledDateTime -Descending } else { @() }
+                NonCompliantDevices     = if ($DeviceComplianceDetails) { $DeviceComplianceDetails.Where({ $_.ComplianceState -eq 'noncompliant' }) | Sort-Object RiskLevel -Descending } else { @() }
+                StaleDevicesList        = if ($DeviceComplianceDetails) { $DeviceComplianceDetails.Where({ $_.IsStaleDevice }) | Sort-Object DaysSinceLastSync -Descending } else { @() }
+                RecentEnrollments       = if ($DeviceComplianceDetails) { $DeviceComplianceDetails.Where({ $_.IsRecentEnrollment }) | Sort-Object EnrolledDateTime -Descending } else { @() }
             }
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(

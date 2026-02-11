@@ -25,9 +25,6 @@ function Get-TntSharedMailboxComplianceReport {
 
         Checks all shared mailboxes for licensing compliance.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -74,7 +71,6 @@ function Get-TntSharedMailboxComplianceReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -105,9 +101,9 @@ function Get-TntSharedMailboxComplianceReport {
                     try {
                         $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
                         if ($Org.VerifiedDomains) {
-                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name)
                             if (-not $TenantDomain) {
-                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                                $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name)
                             }
                         }
                     } catch {
@@ -177,16 +173,16 @@ function Get-TntSharedMailboxComplianceReport {
 
                 # Get license details
                 $HasExchangeLicense = $false
-                $AssignedPlans = @()
+                [System.Collections.Generic.List[string]]$AssignedPlans = @()
                 try {
                     $LicenseDetails = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$UserId/licenseDetails" -Method GET -ErrorAction Stop
                     foreach ($License in $LicenseDetails.value) {
-                        $ExchangeServicePlans = $License.servicePlans | Where-Object {
+                        $ExchangeServicePlans = @($License.servicePlans).Where({
                             $_.servicePlanName -in $ExchangePlans -and $_.provisioningStatus -eq 'Success'
-                        }
-                        if ($ExchangeServicePlans) {
+                        })
+                        if ($ExchangeServicePlans.Count -gt 0) {
                             $HasExchangeLicense = $true
-                            $AssignedPlans += $ExchangeServicePlans.servicePlanName
+                            foreach ($Plan in $ExchangeServicePlans) { $AssignedPlans.Add($Plan.servicePlanName) }
                         }
                     }
                 } catch {
@@ -214,10 +210,9 @@ function Get-TntSharedMailboxComplianceReport {
                     })
             }
 
-            # Build summary
-            $Compliant = @($Mailboxes | Where-Object ComplianceStatus -EQ 'Compliant')
-            $NonCompliant = @($Mailboxes | Where-Object ComplianceStatus -EQ 'NonCompliant')
-            $Unknown = @($Mailboxes | Where-Object ComplianceStatus -EQ 'Unknown')
+            $Compliant = @($Mailboxes.Where({ $_.ComplianceStatus -eq 'Compliant' }))
+            $NonCompliant = @($Mailboxes.Where({ $_.ComplianceStatus -eq 'NonCompliant' }))
+            $Unknown = @($Mailboxes.Where({ $_.ComplianceStatus -eq 'Unknown' }))
 
             $Summary = [PSCustomObject]@{
                 TenantId              = $TenantId

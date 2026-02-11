@@ -8,8 +8,6 @@ function Get-TntAzureSecureScoreReport {
         Azure Security Center secure scores from all accessible subscriptions. It provides comprehensive
         reporting on security posture, recommendations, and compliance across the Azure environment.
 
-        in PowerShell scripts.
-
     .PARAMETER TenantId
         The Azure AD Tenant ID (GUID) to connect to.
 
@@ -87,14 +85,12 @@ function Get-TntAzureSecureScoreReport {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSCustomObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
@@ -102,43 +98,34 @@ function Get-TntAzureSecureScoreReport {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Switch to include detailed security recommendations.
         [Parameter()]
         [switch]$IncludeRecommendations,
 
-        # Optional list of subscription IDs to scope results.
         [Parameter()]
         [string[]]$FilterBySubscription,
 
-        # Maximum number of concurrent API calls.
         [Parameter()]
         [ValidateRange(1, 10)]
         [int]$MaxConcurrentRequests = 5,
 
-        # Switch to include regulatory compliance scores.
         [Parameter()]
         [switch]$IncludeComplianceScore,
 
-        # Switch to include historical trend data.
         [Parameter()]
         [switch]$IncludeHistoricalData,
 
-        # Maximum number of days of historical data to retrieve.
         [Parameter()]
         [ValidateRange(1, 365)]
         [int]$MaxHistoryDays = 90
@@ -162,11 +149,11 @@ function Get-TntAzureSecureScoreReport {
 
             $SubscriptionsUri      = "$($Script:ArmBaseUri)/subscriptions?api-version=2020-01-01"
             $SubscriptionsResponse = Invoke-RestMethod -Uri $SubscriptionsUri -Headers $Script:ArmHeaders -Method GET -ErrorAction Stop
-            $AllSubscriptions      = $SubscriptionsResponse.value | Where-Object { $_.state -eq 'Enabled' }
+            $AllSubscriptions      = $SubscriptionsResponse.value.Where({ $_.state -eq 'Enabled' })
 
             # Filter subscriptions if specified
             if ($FilterBySubscription) {
-                $AllSubscriptions = $AllSubscriptions | Where-Object { $_.subscriptionId -in $FilterBySubscription }
+                $AllSubscriptions = $AllSubscriptions.Where({ $_.subscriptionId -in $FilterBySubscription })
             }
 
             Write-Verbose "Found $($AllSubscriptions.Count) enabled subscriptions to process"
@@ -362,7 +349,7 @@ function Get-TntAzureSecureScoreReport {
             }
 
             # Calculate aggregated statistics
-            $ValidScores = $SubscriptionSecureScores | Where-Object { $_.SecurityCenterEnabled -eq $true }
+            $ValidScores = $SubscriptionSecureScores.Where({ $_.SecurityCenterEnabled -eq $true })
 
             if ($ValidScores.Count -eq 0) {
                 Write-Warning 'No subscriptions with valid secure score data found. Check Security Center enablement and RBAC permissions.'
@@ -423,12 +410,12 @@ function Get-TntAzureSecureScoreReport {
             if ($IncludeHistoricalData -and $ValidScores.Count -gt 0) {
                 Write-Verbose "Retrieving historical secure score data (last $MaxHistoryDays days) for subscriptions..."
 
-                foreach ($Subscription in ($AllSubscriptions | Where-Object { $_.subscriptionId -in ($ValidScores.SubscriptionId) })) {
+                # Cache date calculation outside the loop
+                $StartDate = [datetime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+
+                foreach ($Subscription in $AllSubscriptions.Where({ $_.subscriptionId -in $ValidScores.SubscriptionId })) {
                     try {
                         Write-Verbose "Retrieving historical data for subscription: $($Subscription.displayName)"
-
-                        # Calculate date range for historical data
-                        $StartDate = (Get-Date).AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 
                         # Try to get historical secure score data
                         try {
@@ -464,8 +451,8 @@ function Get-TntAzureSecureScoreReport {
 
                     # Group by subscription and calculate trends
                     $SubscriptionTrends = [System.Collections.Generic.List[PSObject]]::new()
-                    $HistoricalScores | Group-Object SubscriptionId | ForEach-Object {
-                        $SubHistory = $_.Group | Sort-Object Date
+                    foreach ($HistoryGroup in ($HistoricalScores | Group-Object SubscriptionId)) {
+                        $SubHistory = $HistoryGroup.Group | Sort-Object Date
                         if ($SubHistory.Count -gt 1) {
                             $OldestScore = $SubHistory[0]
                             $LatestScore = $SubHistory[-1]
@@ -475,7 +462,7 @@ function Get-TntAzureSecureScoreReport {
                             } else { 0 }
 
                             $SubscriptionTrends.Add([PSCustomObject]@{
-                                    SubscriptionId   = $_.Name
+                                    SubscriptionId   = $HistoryGroup.Name
                                     SubscriptionName = $OldestScore.SubscriptionName
                                     PeriodDays       = $MaxHistoryDays
                                     ScoreChange      = [math]::Round($ScoreChange, 2)
@@ -565,4 +552,3 @@ function Get-TntAzureSecureScoreReport {
         }
     }
 }
-

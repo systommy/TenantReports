@@ -33,9 +33,6 @@ function Get-TntIntuneAppleCertificateReport {
 
         Monitors certificates with 60-day threshold.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a comprehensive report object containing:
@@ -83,7 +80,6 @@ function Get-TntIntuneAppleCertificateReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -124,6 +120,7 @@ function Get-TntIntuneAppleCertificateReport {
             # Initialize collections for certificate/token data
             $AllItems = [System.Collections.Generic.List[PSObject]]::new()
             $Errors   = [System.Collections.Generic.List[PSObject]]::new()
+            $Now      = [datetime]::Now
 
             # Get APNS Certificate
             Write-Verbose 'Retrieving Apple Push Notification Certificate...'
@@ -132,7 +129,7 @@ function Get-TntIntuneAppleCertificateReport {
                 $ApnsCert = Invoke-MgGraphRequest -Uri $ApnsCertUri -Method GET -ErrorAction Stop
 
                 if ($ApnsCert) {
-                    $DaysUntilExpiry = ([DateTime]$ApnsCert.ExpirationDateTime - (Get-Date)).Days
+                    $DaysUntilExpiry = ([DateTime]$ApnsCert.ExpirationDateTime - $Now).Days
                     $IsExpired = $DaysUntilExpiry -lt 0
                     $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
 
@@ -182,7 +179,7 @@ function Get-TntIntuneAppleCertificateReport {
                 if ($DepTokensResponse.value -and $DepTokensResponse.value.Count -gt 0) {
                     foreach ($DepToken in $DepTokensResponse.value) {
                         if ($DepToken.tokenExpirationDateTime) {
-                            $DaysUntilExpiry = ([DateTime]$DepToken.tokenExpirationDateTime - (Get-Date)).Days
+                            $DaysUntilExpiry = ([DateTime]$DepToken.tokenExpirationDateTime - $Now).Days
                             $IsExpired = $DaysUntilExpiry -lt 0
                             $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
 
@@ -231,7 +228,7 @@ function Get-TntIntuneAppleCertificateReport {
                 if ($VppTokensResponse.value -and $VppTokensResponse.value.Count -gt 0) {
                     foreach ($VppToken in $VppTokensResponse.value) {
                         if ($VppToken.expirationDateTime) {
-                            $DaysUntilExpiry = ([DateTime]$VppToken.expirationDateTime - (Get-Date)).Days
+                            $DaysUntilExpiry = ([DateTime]$VppToken.expirationDateTime - $Now).Days
                             $IsExpired = $DaysUntilExpiry -lt 0
                             $IsExpiring = $DaysUntilExpiry -le $ThresholdInDays -and $DaysUntilExpiry -ge 0
 
@@ -282,17 +279,17 @@ function Get-TntIntuneAppleCertificateReport {
             }
         
             # Generate summary statistics
-            $ExpiringCount = ($AllItems | Where-Object { $_.IsExpiring }).Count
+            $ExpiringCount = $AllItems.Where({ $_.IsExpiring }).Count
             $Summary = [PSCustomObject]@{
                 TenantId            = $TenantId
-                ReportGeneratedDate = Get-Date
+                ReportGeneratedDate = $Now
                 TotalItems          = $AllItems.Count
                 ExpiringItems       = $ExpiringCount
-                ExpiredItems        = ($AllItems | Where-Object { $_.IsExpired }).Count
-                ValidItems          = ($AllItems | Where-Object { -not $_.IsExpired -and -not $_.IsExpiring }).Count
-                APNSCertificates    = ($AllItems | Where-Object { $_.Type -eq 'APNS' }).Count
-                DEPTokens           = ($AllItems | Where-Object { $_.Type -eq 'DEP' }).Count
-                VPPTokens           = ($AllItems | Where-Object { $_.Type -eq 'VPP' }).Count
+                ExpiredItems        = $AllItems.Where({ $_.IsExpired }).Count
+                ValidItems          = $AllItems.Where({ -not $_.IsExpired -and -not $_.IsExpiring }).Count
+                APNSCertificates    = $AllItems.Where({ $_.Type -eq 'APNS' }).Count
+                DEPTokens           = $AllItems.Where({ $_.Type -eq 'DEP' }).Count
+                VPPTokens           = $AllItems.Where({ $_.Type -eq 'VPP' }).Count
             }
 
             Write-Information "Apple certificate monitoring completed - $($AllItems.Count) items checked ($ExpiringCount expiring soon)" -InformationAction Continue

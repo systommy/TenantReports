@@ -24,9 +24,6 @@ function Get-TntInboxForwardingRuleReport {
 
         Checks all user mailboxes for external forwarding rules.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -72,7 +69,6 @@ function Get-TntInboxForwardingRuleReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -103,9 +99,9 @@ function Get-TntInboxForwardingRuleReport {
                     try {
                         $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
                         if ($Org.VerifiedDomains) {
-                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name)
                             if (-not $TenantDomain) {
-                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                                $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name)
                             }
                         }
                     } catch {
@@ -135,14 +131,18 @@ function Get-TntInboxForwardingRuleReport {
 
             $ForwardingRules = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+            # Compiled regex for SMTP address extraction
+            [regex]$SmtpRegex = [regex]::new('[Ss][Mm][Tt][Pp]:([^\]]+)', 'Compiled')
+
             # Get accepted domains to determine internal vs external
             Write-Verbose 'Retrieving accepted domains...'
             $AcceptedDomains = (Get-AcceptedDomain).DomainName
 
             # Get all user and shared mailboxes
             Write-Verbose 'Retrieving mailboxes...'
-            $Mailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties UserPrincipalName, DisplayName, RecipientTypeDetails |
-                Where-Object { $_.RecipientTypeDetails -in @('UserMailbox', 'SharedMailbox') }
+            $Mailboxes = (Get-EXOMailbox -ResultSize Unlimited -Properties UserPrincipalName, DisplayName, RecipientTypeDetails).Where(
+                { $_.RecipientTypeDetails -in @('UserMailbox', 'SharedMailbox') }
+            )
 
             Write-Verbose "Checking inbox rules for $($Mailboxes.Count) mailboxes..."
             $TotalRulesChecked = 0
@@ -156,17 +156,17 @@ function Get-TntInboxForwardingRuleReport {
                         $TotalRulesChecked++
 
                         # Collect all forward targets
-                        $ForwardTargets = @()
-                        if ($Rule.ForwardTo) { $ForwardTargets += $Rule.ForwardTo }
-                        if ($Rule.ForwardAsAttachmentTo) { $ForwardTargets += $Rule.ForwardAsAttachmentTo }
-                        if ($Rule.RedirectTo) { $ForwardTargets += $Rule.RedirectTo }
+                        [System.Collections.Generic.List[string]]$ForwardTargets = @()
+                        if ($Rule.ForwardTo) { $ForwardTargets.AddRange([string[]]$Rule.ForwardTo) }
+                        if ($Rule.ForwardAsAttachmentTo) { $ForwardTargets.AddRange([string[]]$Rule.ForwardAsAttachmentTo) }
+                        if ($Rule.RedirectTo) { $ForwardTargets.AddRange([string[]]$Rule.RedirectTo) }
 
-                        if (-not $ForwardTargets) { continue }
+                        if ($ForwardTargets.Count -eq 0) { continue }
 
                         # Check each target for external domains
                         foreach ($Target in $ForwardTargets) {
                             # Extract email address - targets can be in format "DisplayName [SMTP:user@domain.com]"
-                            $EmailMatch = [regex]::Match($Target, '[Ss][Mm][Tt][Pp]:([^\]]+)')
+                            $EmailMatch = $SmtpRegex.Match($Target)
                             $Email = if ($EmailMatch.Success) { $EmailMatch.Groups[1].Value } else { $Target }
 
                             $Domain = ($Email -split '@')[-1]
@@ -196,14 +196,13 @@ function Get-TntInboxForwardingRuleReport {
                 }
             }
 
-            # Build summary
-            $EnabledForwards       = @($ForwardingRules | Where-Object RuleEnabled -EQ $true)
+            $EnabledForwards       = @($ForwardingRules.Where({ $_.RuleEnabled -eq $true }))
             $UniqueMailboxes       = ($ForwardingRules.MailboxUPN | Select-Object -Unique).Count
             $UniqueExternalDomains = ($ForwardingRules.TargetDomain | Select-Object -Unique)
 
             $Summary = [PSCustomObject]@{
                 TenantId                = $TenantId
-                ReportGeneratedDate     = Get-Date
+                ReportGeneratedDate     = [datetime]::Now
                 TotalMailboxesChecked   = $Mailboxes.Count
                 TotalRulesChecked       = $TotalRulesChecked
                 ExternalForwardsFound   = $ForwardingRules.Count
@@ -212,7 +211,7 @@ function Get-TntInboxForwardingRuleReport {
                 ExternalDomains         = $UniqueExternalDomains
             }
 
-            Write-Information "Inbox forwarding analysis completed - checked $($Mailboxes.Count) mailboxes, found $($ForwardingRules.Count) external forwarding rules." -InformationAction Continue
+            Write-Information "Inbox forwarding analysis completed - checked $($Mailboxes.Count) mailboxes and $($TotalRulesChecked) rules, found $($ForwardingRules.Count) external forwarding rules." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary         = $Summary

@@ -80,14 +80,12 @@ function Get-TntM365AuditEvent {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
@@ -95,38 +93,30 @@ function Get-TntM365AuditEvent {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Number of days to include in the report window.
         [Parameter()]
         [ValidateRange(1, 30)]
         [int]$DaysBack = 30,
 
-        # Filter results by the user principal name of the affected user. Supports wildcards.
         [Parameter()]
         [string]$UserFilter,
 
-        # Filter results by the user principal name of the initiator. Supports wildcards.
         [Parameter()]
         [string]$InitiatedByFilter,
 
-        # Filter results by the display name of the affected group. Supports wildcards.
         [string]$GroupFilter,
 
-        # Select which audit stream to query.
         [Parameter()]
         [Alias('Mode')]
         [ValidateSet('User', 'Group', 'UserCreation', 'GroupMembership')]
@@ -139,7 +129,6 @@ function Get-TntM365AuditEvent {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
@@ -174,9 +163,9 @@ function Get-TntM365AuditEvent {
             }
 
             # Build a single, efficient filter for the API call
-            $ActivityFilters = $AuditActivities | ForEach-Object { "activityDisplayName eq '$($_)'" }
+            $ActivityFilters = $AuditActivities.ForEach({ "activityDisplayName eq '$($_)'" })
             $FilterString    = $ActivityFilters -join ' or '
-            $startDate       = (Get-Date).AddDays(-$DaysBack).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $startDate       = [datetime]::UtcNow.AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
             $FullFilter      = "activityDateTime ge $startDate and ($FilterString)"
 
             Write-Verbose "Retrieving audit logs with filter: $FullFilter"
@@ -189,9 +178,15 @@ function Get-TntM365AuditEvent {
                 Write-Verbose 'Pre-caching group names for audit events...'
 
                 # Extract unique group IDs from all audit logs
-                $UniqueGroupIds = $auditLogs.TargetResources |
-                    Where-Object { $_.Type -eq 'Group' } |
-                    Select-Object -ExpandProperty Id -Unique
+                $UniqueGroupIdsSet = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                foreach ($AuditLog in $auditLogs) {
+                    foreach ($TargetResource in @($AuditLog.TargetResources)) {
+                        if ($TargetResource.Type -eq 'Group' -and $TargetResource.Id) {
+                            [void]$UniqueGroupIdsSet.Add($TargetResource.Id)
+                        }
+                    }
+                }
+                $UniqueGroupIds = @($UniqueGroupIdsSet)
 
                 # Build cache with single API call per unique group
                 foreach ($GroupId in $UniqueGroupIds) {
@@ -235,9 +230,26 @@ function Get-TntM365AuditEvent {
                 }
 
                 # Extract target resources. An event can have multiple targets.
-                $targetUser   = $log.TargetResources | Where-Object { $_.Type -eq 'User' } | Select-Object -First 1
-                $targetDevice = $log.TargetResources | Where-Object { $_.Type -eq 'Device' } | Select-Object -First 1
-                $targetGroup  = $log.TargetResources | Where-Object { $_.Type -eq 'Group' } | Select-Object -First 1
+                $targetUser = $null
+                $targetDevice = $null
+                $targetGroup = $null
+                foreach ($TargetResource in @($log.TargetResources)) {
+                    switch ($TargetResource.Type) {
+                        'User' {
+                            if (-not $targetUser) { $targetUser = $TargetResource }
+                        }
+                        'Device' {
+                            if (-not $targetDevice) { $targetDevice = $TargetResource }
+                        }
+                        'Group' {
+                            if (-not $targetGroup) { $targetGroup = $TargetResource }
+                        }
+                    }
+
+                    if ($targetUser -and $targetDevice -and $targetGroup) {
+                        break
+                    }
+                }
 
                 if ($targetUser) {
                     $Output.TargetUserUPN = $targetUser.UserPrincipalName
@@ -282,8 +294,8 @@ function Get-TntM365AuditEvent {
                     AuditMode           = $AuditMode
                     DaysBack            = $DaysBack
                     TotalEvents         = $Results.Count
-                    SuccessfulEvents    = ($Results | Where-Object { $_.Result -eq 'success' }).Count
-                    FailedEvents        = ($Results | Where-Object { $_.Result -eq 'failure' }).Count
+                    SuccessfulEvents    = $Results.Where({ $_.Result -eq 'success' }).Count
+                    FailedEvents        = $Results.Where({ $_.Result -eq 'failure' }).Count
                 }
                 Details = $Results
             }

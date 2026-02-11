@@ -19,6 +19,21 @@ All notable changes to TenantReports will be documented in this file.
 - Misleading summary message in `Get-TntInboxForwardingRuleReport` ("across 0 mailboxes") replaced with total checked and rules found
 - Summary message in `Get-TntLicenseChangeAuditReport` simplified to avoid misleading count
 
+### Performance
+- Replaced in-memory pipeline filters/transforms (`Where-Object` / `ForEach-Object`) with `.Where()` / `.ForEach()` or `foreach` where appropriate.
+- Kept intentional pipeline usage for `ForEach-Object -Parallel` and example-only snippets.
+- Cached current time in loop-heavy paths (`[datetime]::Now` / `[datetime]::UtcNow`) to reduce repeated `Get-Date` overhead.
+- Replaced array `+=` accumulation in loop paths with generic list `.Add()` / `.AddRange()`.
+- Completed regex optimization for repeated loop matching with compiled regex patterns.
+
+## Error-handling consistency
+- Updated `Connect-TntGraphSession` to follow module-standard terminating error handling.
+- Replaced ad-hoc `throw`/`Write-Error` patterns in key control paths with structured `ErrorRecord` creation and `$PSCmdlet.ThrowTerminatingError(...)`.
+- Preserved existing diagnostic warnings and guidance while ensuring terminating behavior is consistent.
+
+## Cleanups
+- Cleaned up comment-based help (CBH) sections and removed obsolete/unneeded comments.
+
 ## 1.0 - 2026-02-06
 
 Initial release

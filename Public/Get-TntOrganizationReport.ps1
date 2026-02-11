@@ -33,9 +33,6 @@ function Get-TntOrganizationReport {
 
         Retrieves comprehensive tenant information including directory statistics.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -86,7 +83,6 @@ function Get-TntOrganizationReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -112,10 +108,10 @@ function Get-TntOrganizationReport {
             # Retrieve verified domains
             Write-Verbose 'Retrieving domain information...'
             $Domains = Get-MgDomain -All -ErrorAction Stop
-            $PrimaryDomain = $Domains | Where-Object { $_.IsDefault -eq $true }
-            $InitialDomain = $Domains | Where-Object { $_.IsInitial -eq $true }
-            $VerifiedDomains = $Domains | Where-Object { $_.IsVerified -eq $true }
-            $FederatedDomains = $Domains | Where-Object { $_.AuthenticationType -eq 'Federated' }
+            $PrimaryDomain = @($Domains.Where({ $_.IsDefault -eq $true }))
+            $InitialDomain = @($Domains.Where({ $_.IsInitial -eq $true }))
+            $VerifiedDomains = @($Domains.Where({ $_.IsVerified -eq $true }))
+            $FederatedDomains = @($Domains.Where({ $_.AuthenticationType -eq 'Federated' }))
 
             Write-Verbose 'Retrieving directory statistics...'
             try {

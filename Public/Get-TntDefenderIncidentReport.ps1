@@ -38,9 +38,6 @@ function Get-TntDefenderIncidentReport {
 
         Retrieves High severity incidents from the last 30 days.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -86,7 +83,6 @@ function Get-TntDefenderIncidentReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -113,7 +109,7 @@ function Get-TntDefenderIncidentReport {
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
             # Calculate start date
-            $StartDate = (Get-Date).AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
+            $StartDate = [datetime]::UtcNow.AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
             Write-Verbose "Retrieving incidents from $($StartDate) to present"
 
             # Build filter parameters
@@ -122,14 +118,14 @@ function Get-TntDefenderIncidentReport {
             }
 
             if ($Severity -and $Severity.Count -gt 0) {
-                $SeverityFilter = $Severity | ForEach-Object { "'$($_.ToLower())'" }
+                $SeverityFilter = $Severity.ForEach({ "'$($_.ToLower())'" })
                 $SeverityFilterString = $SeverityFilter -join ', '
                 $FilterParams.Filter += " and severity in ($($SeverityFilterString))"
                 Write-Verbose "Filtering by severity: $($Severity -join ', ')"
             }
 
             if ($Status -and $Status.Count -gt 0) {
-                $StatusFilter = $Status | ForEach-Object { "'$($_.ToLower())'" }
+                $StatusFilter = $Status.ForEach({ "'$($_.ToLower())'" })
                 $StatusFilterString = $StatusFilter -join ', '
                 $FilterParams.Filter += " and status in ($($StatusFilterString))"
                 Write-Verbose "Filtering by status: $($Status -join ', ')"
@@ -165,10 +161,10 @@ function Get-TntDefenderIncidentReport {
             $Summary = [PSCustomObject]@{
                 TotalIncidents = if ($IncidentSummary) { $IncidentSummary.Count } else { 0 }
                 BySeverity     = if ($IncidentSummary) {
-                    $IncidentSummary | Group-Object Severity | ForEach-Object { @{ $_.Name = $_.Count } }
+                    ($IncidentSummary | Group-Object Severity).ForEach({ @{ $_.Name = $_.Count } })
                 } else { @{} }
                 ByStatus       = if ($IncidentSummary) {
-                    $IncidentSummary | Group-Object Status | ForEach-Object { @{ $_.Name = $_.Count } }
+                    ($IncidentSummary | Group-Object Status).ForEach({ @{ $_.Name = $_.Count } })
                 } else { @{} }
             }
 

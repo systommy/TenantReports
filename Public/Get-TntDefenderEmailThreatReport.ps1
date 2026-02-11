@@ -32,9 +32,6 @@ function Get-TntDefenderEmailThreatReport {
 
         Retrieves report for the last 30 days.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing summary statistics of email threats.
@@ -90,7 +87,7 @@ function Get-TntDefenderEmailThreatReport {
 
     begin {
         # Calculate date range from DaysBack
-        $EndDate   = Get-Date
+        $EndDate   = [datetime]::Now
         $StartDate = $EndDate.AddDays(-$DaysBack)
 
         # Map DaysBack to nearest valid API period (D7, D30, D90, D180)
@@ -116,7 +113,7 @@ function Get-TntDefenderEmailThreatReport {
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
             $Report = [PSCustomObject]@{
-                ReportDate             = Get-Date
+                ReportDate             = $EndDate
                 StartDate              = $StartDate
                 EndDate                = $EndDate
                 TotalSecurityAlerts    = 0
@@ -142,22 +139,22 @@ function Get-TntDefenderEmailThreatReport {
                 $AllAlerts   = Get-MgBetaSecurityAlert -Filter $AlertFilter -All -ErrorAction Stop
 
                 # Filter for email-related alerts by category or title - ensure array output
-                $SecurityAlerts = @($AllAlerts | Where-Object {
+                $SecurityAlerts = @($AllAlerts.Where({
                         $_.Category -in @('phishing', 'malware', 'spam', 'email') -or
                         $_.Title -match 'phish|malware|spam|email|threat'
-                    })
+                    }))
 
                 Write-Verbose "Retrieved $($AllAlerts.Count) total alerts, $($SecurityAlerts.Count) email-related"
 
                 if ($SecurityAlerts.Count -gt 0) {
                     $Report.TotalSecurityAlerts  = $SecurityAlerts.Count
-                    $Report.HighSeverityAlerts   = ($SecurityAlerts | Where-Object { $_.Severity -eq 'high' }).Count
-                    $Report.MediumSeverityAlerts = ($SecurityAlerts | Where-Object { $_.Severity -eq 'medium' }).Count
-                    $Report.LowSeverityAlerts    = ($SecurityAlerts | Where-Object { $_.Severity -eq 'low' }).Count
-                    $Report.ActiveAlerts         = ($SecurityAlerts | Where-Object { $_.Status -ne 'resolved' }).Count
-                    $Report.ResolvedAlerts       = ($SecurityAlerts | Where-Object { $_.Status -eq 'resolved' }).Count
-                    $Report.PhishingAlerts       = ($SecurityAlerts | Where-Object { $_.Category -eq 'phishing' }).Count
-                    $Report.MalwareAlerts        = ($SecurityAlerts | Where-Object { $_.Category -eq 'malware' }).Count
+                    $Report.HighSeverityAlerts   = $SecurityAlerts.Where({ $_.Severity -eq 'high' }).Count
+                    $Report.MediumSeverityAlerts = $SecurityAlerts.Where({ $_.Severity -eq 'medium' }).Count
+                    $Report.LowSeverityAlerts    = $SecurityAlerts.Where({ $_.Severity -eq 'low' }).Count
+                    $Report.ActiveAlerts         = $SecurityAlerts.Where({ $_.Status -ne 'resolved' }).Count
+                    $Report.ResolvedAlerts       = $SecurityAlerts.Where({ $_.Status -eq 'resolved' }).Count
+                    $Report.PhishingAlerts       = $SecurityAlerts.Where({ $_.Category -eq 'phishing' }).Count
+                    $Report.MalwareAlerts        = $SecurityAlerts.Where({ $_.Category -eq 'malware' }).Count
                 }
             } catch {
                 Write-Warning "Failed to retrieve security alerts: $($_.Exception.Message)"
@@ -205,12 +202,12 @@ function Get-TntDefenderEmailThreatReport {
             Write-Verbose 'Retrieving threat submission data...'
             try {
                 $allSubmissions    = Get-MgBetaSecurityThreatSubmissionEmailThreat -All -ErrorAction Stop
-                $recentSubmissions = $allSubmissions | Where-Object { $_.CreatedDateTime -ge $StartDate }
+                $recentSubmissions = @($allSubmissions.Where({ $_.CreatedDateTime -ge $StartDate }))
 
                 if ($null -ne $recentSubmissions) {
                     $Report.TotalThreatSubmissions = $recentSubmissions.Count
-                    $Report.PhishingSubmissions    = ($recentSubmissions | Where-Object { $_.Category -eq 'phishing' }).Count
-                    $Report.MalwareSubmissions     = ($recentSubmissions | Where-Object { $_.Category -eq 'malware' }).Count
+                    $Report.PhishingSubmissions    = $recentSubmissions.Where({ $_.Category -eq 'phishing' }).Count
+                    $Report.MalwareSubmissions     = $recentSubmissions.Where({ $_.Category -eq 'malware' }).Count
                 }
                 Write-Verbose "Retrieved $($Report.TotalThreatSubmissions) recent threat submissions."
             } catch {

@@ -106,7 +106,7 @@ function Resolve-GraphObjectNames {
         }
     }
 
-    # --- Service Principals (by object ID) ---
+    # Service Principals (by object ID)
     if ($ServicePrincipalIds -and $ServicePrincipalIds.Count -gt 0) {
         $UniqueSPIds = [System.Collections.Generic.HashSet[string]]::new(
             [string[]]$ServicePrincipalIds,
@@ -134,7 +134,7 @@ function Resolve-GraphObjectNames {
         }
     }
 
-    # --- Applications (by AppId, resolved via service principal filter) ---
+    # Applications (by AppId, resolved via service principal filter)
     if ($ApplicationIds -and $ApplicationIds.Count -gt 0) {
         $UniqueAppIds = [System.Collections.Generic.HashSet[string]]::new(
             [string[]]$ApplicationIds,

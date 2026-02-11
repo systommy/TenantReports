@@ -8,8 +8,6 @@ function Get-TntM365SecureScoreReport {
         the tenant's secure score, security controls implementation status, and provides actionable security
         recommendations. It includes historical trending data and risk-based prioritization.
 
-        in PowerShell scripts.
-
     .PARAMETER TenantId
         The Azure AD Tenant ID (GUID) to connect to.
 
@@ -78,14 +76,12 @@ function Get-TntM365SecureScoreReport {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSCustomObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
@@ -93,35 +89,28 @@ function Get-TntM365SecureScoreReport {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Switch to include historical trend data.
         [Parameter()]
         [switch]$IncludeHistoricalData,
 
-        # Optional secure score category filter.
         [Parameter()]
         [ValidateSet('Identity', 'Data', 'Device', 'Apps', 'Infrastructure')]
         [string]$FilterByCategory,
 
-        # Switch to return only actionable recommendations.
         [Parameter()]
         [switch]$ShowOnlyRecommendations,
 
-        # Maximum number of days of historical data to retrieve.
         [Parameter()]
         [ValidateRange(1, 365)]
         [int]$MaxHistoryDays = 90
@@ -133,7 +122,6 @@ function Get-TntM365SecureScoreReport {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
@@ -226,7 +214,7 @@ function Get-TntM365SecureScoreReport {
             if ($IncludeHistoricalData) {
                 Write-Verbose "Retrieving historical secure score data (last $MaxHistoryDays days)..."
                 try {
-                    $HistoryStartDate = (Get-Date).AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+                    $HistoryStartDate = [datetime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 
                     # Try multiple methods for historical data
                     try {
@@ -318,8 +306,12 @@ function Get-TntM365SecureScoreReport {
                     $ControlId = $Control.Id
                     $ControlTitle = $Control.Title
 
-                    $MatchingControl = $controlScoresArray | Where-Object {
-                        $_.ControlName -and ($_.ControlName -eq $ControlId -or $_.ControlName -eq $ControlTitle)
+                    $MatchingControl = $null
+                    foreach ($ScoreEntry in $controlScoresArray) {
+                        if ($ScoreEntry.ControlName -and ($ScoreEntry.ControlName -eq $ControlId -or $ScoreEntry.ControlName -eq $ControlTitle)) {
+                            $MatchingControl = $ScoreEntry
+                            break
+                        }
                     }
 
                     if ($MatchingControl) {
@@ -402,6 +394,18 @@ function Get-TntM365SecureScoreReport {
                     0
                 }
 
+                $ScoreTotal = 0
+                foreach ($HistoricalScore in $HistoricalScores) {
+                    if ($null -ne $HistoricalScore.CurrentScore) {
+                        $ScoreTotal += [int]$HistoricalScore.CurrentScore
+                    }
+                }
+                $AverageHistoricalScore = if ($HistoricalScores.Count -gt 0) {
+                    [math]::Round(($ScoreTotal / $HistoricalScores.Count), 1)
+                } else {
+                    0
+                }
+
                 $TrendAnalysis = [PSCustomObject]@{
                     PeriodDays           = $MaxHistoryDays
                     ScoreChange          = $ScoreChange
@@ -417,18 +421,10 @@ function Get-TntM365SecureScoreReport {
                     OldestScore          = $OldestScoreValue
                     LatestScoreDate      = $LatestScore.CreatedDateTime
                     LatestScore          = $CurrentScoreValue
-                    AverageScore         = [math]::Round(($HistoricalScores | ForEach-Object {
-                                if ($null -ne $_.CurrentScore) {
-                                    [int]$_.CurrentScore
-                                } else {
-                                    0
-                                }
-                            } | Measure-Object -Average).Average, 1)
+                    AverageScore         = $AverageHistoricalScore
                     HistoricalDataPoints = $HistoricalScores.Count
                 }
             }
-
-            # Generate comprehensive summary using single-pass accumulation
             $ControlStats = @{
                 ImplementedControls         = 0
                 NotImplementedControls      = 0
@@ -503,18 +499,18 @@ function Get-TntM365SecureScoreReport {
                 Summary                 = $Summary
                 TrendAnalysis           = $TrendAnalysis
                 RecommendationsByImpact = @{
-                    High   = $SortedControls | Where-Object { $_.IsRecommendation -and $_.MaxScore -ge 10 }
-                    Medium = $SortedControls | Where-Object { $_.IsRecommendation -and $_.MaxScore -ge 5 -and $_.MaxScore -lt 10 }
-                    Low    = $SortedControls | Where-Object { $_.IsRecommendation -and $_.MaxScore -lt 5 }
+                    High   = @($SortedControls.Where({ $_.IsRecommendation -and $_.MaxScore -ge 10 }))
+                    Medium = @($SortedControls.Where({ $_.IsRecommendation -and $_.MaxScore -ge 5 -and $_.MaxScore -lt 10 }))
+                    Low    = @($SortedControls.Where({ $_.IsRecommendation -and $_.MaxScore -lt 5 }))
                 }
-                ImplementedControls     = $SortedControls | Where-Object { $_.ImplementationStatus -eq 'Implemented' }
+                ImplementedControls     = @($SortedControls.Where({ $_.ImplementationStatus -eq 'Implemented' }))
                 AllControls             = $SortedControls
                 ControlsByCategory      = @{
-                    Identity       = $SortedControls | Where-Object { $_.Category -eq 'Identity' }
-                    Data           = $SortedControls | Where-Object { $_.Category -eq 'Data' }
-                    Device         = $SortedControls | Where-Object { $_.Category -eq 'Device' }
-                    Apps           = $SortedControls | Where-Object { $_.Category -eq 'Apps' }
-                    Infrastructure = $SortedControls | Where-Object { $_.Category -eq 'Infrastructure' }
+                    Identity       = @($SortedControls.Where({ $_.Category -eq 'Identity' }))
+                    Data           = @($SortedControls.Where({ $_.Category -eq 'Data' }))
+                    Device         = @($SortedControls.Where({ $_.Category -eq 'Device' }))
+                    Apps           = @($SortedControls.Where({ $_.Category -eq 'Apps' }))
+                    Infrastructure = @($SortedControls.Where({ $_.Category -eq 'Infrastructure' }))
                 }
                 HistoricalScores        = if ($IncludeHistoricalData) { $HistoricalScores } else { @() }
             }
@@ -533,4 +529,3 @@ function Get-TntM365SecureScoreReport {
         }
     }
 }
-

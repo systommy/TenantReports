@@ -80,7 +80,7 @@ function Disconnect-TntGraphSession {
 
                         # Clear user cache for this tenant
                         if ($script:UserCache -and $ConnectionState.TenantId) {
-                            $CacheKeysToRemove = @($script:UserCache.Keys | Where-Object { $_ -like "$($ConnectionState.TenantId)-*" })
+                            $CacheKeysToRemove = @($script:UserCache.Keys.Where({ $_ -like "$($ConnectionState.TenantId)-*" }))
                             foreach ($Key in $CacheKeysToRemove) {
                                 $script:UserCache.Remove($Key)
                             }

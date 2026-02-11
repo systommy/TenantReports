@@ -42,9 +42,6 @@ function Get-TntServicePrincipalPermissionReport {
 
         Generates a report containing only critical risk permissions, including all user consents by default.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a comprehensive report object containing:
@@ -95,7 +92,6 @@ function Get-TntServicePrincipalPermissionReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -181,7 +177,7 @@ function Get-TntServicePrincipalPermissionReport {
 
             Write-Verbose "Found $($AllServicePrincipals.Count) service principals"
 
-            # Build hashtable lookup for O(1) service principal lookups (Performance optimization: Phase 3)
+            # Build hashtable lookup for O(1) service principal lookups
             $ServicePrincipalLookupById = @{}
             foreach ($SP in $AllServicePrincipals) {
                 if ($SP.Id) { $ServicePrincipalLookupById[$SP.Id] = $SP }
@@ -194,9 +190,9 @@ function Get-TntServicePrincipalPermissionReport {
             Write-Verbose "Found $($AllOAuth2Grants.Count) OAuth2 permission grants"
 
             # Collect unique PrincipalIds for user consent grants (incremental caching)
-            $UserConsentPrincipalIds = @($AllOAuth2Grants |
-                    Where-Object { $_.ConsentType -eq 'Principal' -and $_.PrincipalId } |
-                    Select-Object -ExpandProperty PrincipalId -Unique)
+            $UserConsentPrincipalIds = @($AllOAuth2Grants.Where({
+                        $_.ConsentType -eq 'Principal' -and $_.PrincipalId
+                    }) | Select-Object -ExpandProperty PrincipalId -Unique)
 
             # Pre-fetch only the specific users needed (incremental mode - NOT all users)
             $UserCache = $null
@@ -210,6 +206,8 @@ function Get-TntServicePrincipalPermissionReport {
                 $UserCache = Get-CachedUsers @CacheParams
                 Write-Verbose "User cache ready: $($UserCache.UserCount) users (CacheHit: $($UserCache.CacheHit))"
             }
+
+            $Now = [datetime]::Now
 
             # Process each OAuth2 grant
             foreach ($Grant in $AllOAuth2Grants) {
@@ -238,7 +236,7 @@ function Get-TntServicePrincipalPermissionReport {
                     }
 
                     # Parse individual scopes
-                    $Scopes = if ($Grant.Scope.Count -gt 0) { $Grant.Scope.Split(' ') | Where-Object { $_ } } else { $Grant.Scope }
+                    $Scopes = if ($Grant.Scope.Count -gt 0) { @($Grant.Scope.Split(' ').Where({ $_ })) } else { @($Grant.Scope) }
 
                     foreach ($Scope in $Scopes) {
                         # Determine risk level
@@ -283,7 +281,6 @@ function Get-TntServicePrincipalPermissionReport {
                             continue
                         }
 
-                        # Create report entry
                         $ReportEntry = [PSCustomObject]@{
                             GrantId                    = $Grant.Id
                             ClientApplicationId        = $ClientServicePrincipal.AppId
@@ -310,9 +307,9 @@ function Get-TntServicePrincipalPermissionReport {
                             RiskLevel                  = $RiskLevel
                             GrantStartTime             = $Grant.StartTime
                             GrantExpiryTime            = $Grant.ExpiryTime
-                            IsExpired                  = if ($Grant.ExpiryTime) { $Grant.ExpiryTime -lt (Get-Date) } else { $false }
+                            IsExpired                  = if ($Grant.ExpiryTime) { $Grant.ExpiryTime -lt $Now } else { $false }
                             DaysUntilExpiry            = if ($Grant.ExpiryTime) {
-                                [math]::Round(($Grant.ExpiryTime - (Get-Date)).TotalDays, 0)
+                                [math]::Round(($Grant.ExpiryTime - $Now).TotalDays, 0)
                             } else {
                                 $null
                             }
@@ -329,9 +326,10 @@ function Get-TntServicePrincipalPermissionReport {
             # Filter inactive apps if excluded
             if ($ExcludeInactiveApps) {
                 Write-Verbose 'Filtering out inactive applications...'
-                $DelegatedPermissionGrants = $DelegatedPermissionGrants | Where-Object {
-                    -not $_.ClientCreatedDate -or $_.ClientCreatedDate -gt (Get-Date).AddDays(-90)
-                }
+                $InactiveThreshold = [datetime]::Now.AddDays(-90)
+                $DelegatedPermissionGrants = @($DelegatedPermissionGrants.Where({
+                            -not $_.ClientCreatedDate -or $_.ClientCreatedDate -gt $InactiveThreshold
+                        }))
             }
 
             # Sort results by risk level and application name
@@ -402,10 +400,10 @@ function Get-TntServicePrincipalPermissionReport {
 
             [PSCustomObject]@{
                 Summary                 = $Summary
-                CriticalRiskPermissions = $SortedResults | Where-Object { $_.RiskLevel -eq 'Critical' } | Sort-Object ClientApplicationName, Permission
-                HighRiskPermissions     = $SortedResults | Where-Object { $_.RiskLevel -eq 'High' } | Sort-Object ClientApplicationName, Permission
-                MediumRiskPermissions   = $SortedResults | Where-Object { $_.RiskLevel -eq 'Medium' } | Sort-Object ClientApplicationName, Permission
-                LowRiskPermissions      = $SortedResults | Where-Object { $_.RiskLevel -eq 'Low' } | Sort-Object ClientApplicationName, Permission
+                CriticalRiskPermissions = @($SortedResults.Where({ $_.RiskLevel -eq 'Critical' }) | Sort-Object ClientApplicationName, Permission)
+                HighRiskPermissions     = @($SortedResults.Where({ $_.RiskLevel -eq 'High' }) | Sort-Object ClientApplicationName, Permission)
+                MediumRiskPermissions   = @($SortedResults.Where({ $_.RiskLevel -eq 'Medium' }) | Sort-Object ClientApplicationName, Permission)
+                LowRiskPermissions      = @($SortedResults.Where({ $_.RiskLevel -eq 'Low' }) | Sort-Object ClientApplicationName, Permission)
                 AllPermissions          = $SortedResults
             }
         } catch {

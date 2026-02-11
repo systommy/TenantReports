@@ -140,7 +140,13 @@ function Connect-TntGraphSession {
         # For non-interactive auth, TenantId and ClientId are required
         if (-not $Interactive) {
             if ([string]::IsNullOrWhiteSpace($TenantId) -or [string]::IsNullOrWhiteSpace($ClientId)) {
-                throw 'TenantId and ClientId are required parameters for non-interactive authentication'
+                $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                    [System.Exception]::new('Connect-TntGraphSession failed: TenantId and ClientId are required parameters for non-interactive authentication.'),
+                    'ConnectTntGraphSessionParameterValidationError',
+                    [System.Management.Automation.ErrorCategory]::InvalidArgument,
+                    $null
+                )
+                $PSCmdlet.ThrowTerminatingError($errorRecord)
             }
         }
 
@@ -226,15 +232,26 @@ function Connect-TntGraphSession {
                     $ConnectionState.ServiceType = 'Microsoft Graph (Interactive)'
                     Write-Information "Connected to tenant: $($NewContext.TenantId)" -InformationAction Continue
                 } else {
-                    throw 'Interactive authentication completed but no Graph context was established'
+                    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                        [System.Exception]::new('Connect-TntGraphSession failed: Interactive authentication completed but no Graph context was established.'),
+                        'ConnectTntGraphSessionInteractiveContextError',
+                        [System.Management.Automation.ErrorCategory]::ConnectionError,
+                        $TenantId
+                    )
+                    $PSCmdlet.ThrowTerminatingError($errorRecord)
                 }
 
                 return $ConnectionState
             } catch {
                 $ConnectionState.Connected = $false
                 $ConnectionState.ErrorMessage = $_.Exception.Message
-                Write-Error "Failed to establish interactive connection: $($_.Exception.Message)"
-                throw
+                $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                    [System.Exception]::new("Connect-TntGraphSession failed to establish interactive connection: $($_.Exception.Message)", $_.Exception),
+                    'ConnectTntGraphSessionInteractiveConnectionError',
+                    [System.Management.Automation.ErrorCategory]::ConnectionError,
+                    $TenantId
+                )
+                $PSCmdlet.ThrowTerminatingError($errorRecord)
             }
         }
 
@@ -384,8 +401,6 @@ function Connect-TntGraphSession {
             $ConnectionState.ErrorMessage = $_.Exception.Message
             $ErrorDetails = $_.Exception.Message
 
-            Write-Error "Failed to establish connection to $($Scope): $($_.Exception.Message)"
-
             if ($_.Exception.Message -match 'AADSTS700016|Invalid client_id') {
                 Write-Warning @"
 The application (client) ID was not found in the tenant. Please verify:
@@ -441,7 +456,24 @@ For Azure Resource Manager access:
 
                 Write-Warning $GuidanceMessage
             }
-            throw
+
+            $ErrorCategory = switch -Regex ($ErrorDetails) {
+                'AADSTS700016|Invalid client_id|AADSTS7000215|Invalid client secret|AADSTS700027|Certificate|AADSTS65001|consent' {
+                    [System.Management.Automation.ErrorCategory]::AuthenticationError
+                    break
+                }
+                default {
+                    [System.Management.Automation.ErrorCategory]::ConnectionError
+                }
+            }
+
+            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                [System.Exception]::new("Connect-TntGraphSession failed to establish $ConnectionType connection for scope '$Scope' in tenant '$TenantId': $ErrorDetails", $_.Exception),
+                'ConnectTntGraphSessionConnectionError',
+                $ErrorCategory,
+                $TenantId
+            )
+            $PSCmdlet.ThrowTerminatingError($errorRecord)
         }
     }
 }

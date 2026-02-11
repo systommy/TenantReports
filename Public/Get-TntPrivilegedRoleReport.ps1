@@ -38,9 +38,6 @@ function Get-TntPrivilegedRoleReport {
 
         Generates a report analyzing the last 90 days of role activation logs.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a privileged role report object with:
@@ -95,7 +92,7 @@ function Get-TntPrivilegedRoleReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
+        # Use interactive authentication .
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -109,7 +106,7 @@ function Get-TntPrivilegedRoleReport {
 
     begin {
         # Calculate date range for analysis
-        $StartDate       = (Get-Date).AddDays(-$LookbackDays)
+        $StartDate       = [datetime]::Now.AddDays(-$LookbackDays)
         $StartDateString = $StartDate.ToString('yyyy-MM-ddTHH:mm:ssZ')
 
         Write-Information 'Starting privileged role report generation...' -InformationAction Continue
@@ -117,7 +114,6 @@ function Get-TntPrivilegedRoleReport {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
@@ -129,9 +125,15 @@ function Get-TntPrivilegedRoleReport {
             # Get all role definitions to identify privileged roles
             Write-Verbose 'Retrieving role definitions...'
             $RoleDefinitions = Get-MgRoleManagementDirectoryRoleDefinition -All -ErrorAction Stop
+
             # Client-side filtering required: Graph API does not support filtering by DisplayName array or IsBuiltIn property
-            $PrivilegedRoles = $RoleDefinitions | Where-Object {
-                $_.DisplayName -in $script:PrivilegedRoleNames -or $_.IsBuiltIn -eq $false
+            $PrivilegedRoles = @($RoleDefinitions.Where({
+                    $_.DisplayName -in $script:PrivilegedRoleNames -or $_.IsBuiltIn -eq $false
+                }))
+
+            $PrivilegedRoleLookup = @{}
+            foreach ($PrivilegedRole in $PrivilegedRoles) {
+                $PrivilegedRoleLookup[$PrivilegedRole.Id] = $PrivilegedRole
             }
 
             Write-Verbose "Identified $($PrivilegedRoles.Count) privileged roles"
@@ -144,7 +146,7 @@ function Get-TntPrivilegedRoleReport {
             $GroupIdsToResolve = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
             $SPIdsToResolve    = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
             $PrivilegedRoleIds = [System.Collections.Generic.HashSet[string]]::new(
-                [string[]]($PrivilegedRoles | Select-Object -ExpandProperty Id),
+                [string[]]$PrivilegedRoles.ForEach({ $_.Id }),
                 [StringComparer]::OrdinalIgnoreCase
             )
 
@@ -165,7 +167,7 @@ function Get-TntPrivilegedRoleReport {
             $PrincipalLookup = Resolve-GraphObjectNames -GroupIds @($GroupIdsToResolve) -ServicePrincipalIds @($SPIdsToResolve)
 
             foreach ($Assignment in $AllPermanentAssignments) {
-                $Role = $PrivilegedRoles | Where-Object { $_.Id -eq $Assignment.RoleDefinitionId }
+                $Role = $PrivilegedRoleLookup[$Assignment.RoleDefinitionId]
                 if ($Role) {
                     $PrincipalType = if ($Assignment.Principal.AdditionalProperties.'@odata.type') {
                         $Assignment.Principal.AdditionalProperties.'@odata.type' -replace '#microsoft.graph.', ''
@@ -214,9 +216,9 @@ function Get-TntPrivilegedRoleReport {
                 $AuditFilter = "activityDateTime ge $($StartDateString) and category eq 'RoleManagement'"
                 $AuditLogs   = Get-MgAuditLogDirectoryAudit -Filter $AuditFilter -All -ErrorAction Stop
 
-                $RoleActivationLogs = $AuditLogs | Where-Object {
-                    $_.ActivityDisplayName -match 'Add member to role|Role activation|Activate role'
-                }
+                $RoleActivationLogs = @($AuditLogs.Where({
+                            $_.ActivityDisplayName -match 'Add member to role|Role activation|Activate role'
+                        }))
 
                 foreach ($Log in $RoleActivationLogs) {
                     $RoleActivations.Add([PSCustomObject]@{
@@ -224,8 +226,8 @@ function Get-TntPrivilegedRoleReport {
                             ActivityDateTime        = $Log.ActivityDateTime
                             ActivityDisplayName     = $Log.ActivityDisplayName
                             InitiatedBy             = $Log.InitiatedBy.User.UserPrincipalName
-                            TargetRole              = ($Log.TargetResources | Where-Object { $_.Type -eq 'Role' }).DisplayName
-                            TargetUserPrincipalName = ($Log.TargetResources | Where-Object { $_.Type -eq 'User' }).UserPrincipalName
+                            TargetRole              = @($Log.TargetResources).Where({ $_.Type -eq 'Role' }).DisplayName
+                            TargetUserPrincipalName = @($Log.TargetResources).Where({ $_.Type -eq 'User' }).UserPrincipalName
                             Result                  = $Log.Result
                             ResultReason            = $Log.ResultReason
                         })
@@ -236,14 +238,15 @@ function Get-TntPrivilegedRoleReport {
 
             # Identify emergency access accounts
             Write-Verbose 'Analyzing emergency access accounts...'
-            $PotentialEmergencyAccounts = $PermanentAssignments | Where-Object {
-                $_.IsEmergencyAccount -or
-                ($_.RoleName -eq 'Global Administrator' -and $_.AssignmentType -eq 'Permanent')
-            } | Select-Object PrincipalId, PrincipalName, PrincipalUPN -Unique
+            $PotentialEmergencyAccounts = $PermanentAssignments.Where({
+                    $_.IsEmergencyAccount -or
+                    ($_.RoleName -eq 'Global Administrator' -and $_.AssignmentType -eq 'Permanent')
+                }) | Select-Object PrincipalId, PrincipalName, PrincipalUPN -Unique
 
             # Pre-fetch emergency account users (incremental mode - only specific users needed)
             $EmergencyPrincipalIds = @($PotentialEmergencyAccounts | Select-Object -ExpandProperty PrincipalId -Unique)
             $UserCache             = $null
+            $Now                   = [datetime]::Now
             if ($EmergencyPrincipalIds.Count -gt 0) {
                 Write-Verbose "Pre-fetching $($EmergencyPrincipalIds.Count) emergency account users (incremental mode)..."
                 $CacheParams = @{
@@ -271,7 +274,7 @@ function Get-TntPrivilegedRoleReport {
                     }
 
                     if ($User) {
-                        $AccountRoles = $PermanentAssignments | Where-Object { $_.PrincipalId -eq $Account.PrincipalId }
+                        $AccountRoles = @($PermanentAssignments.Where({ $_.PrincipalId -eq $Account.PrincipalId }))
                         $LastSignIn   = $User.SignInActivity.LastSignInDateTime
 
                         # Validate LastSignIn - handle "-" or empty string values
@@ -288,10 +291,10 @@ function Get-TntPrivilegedRoleReport {
                                 LastSignInDateTime      = $LastSignIn
                                 AssignedRoles           = ($AccountRoles.RoleName | Sort-Object -Unique) -join '; '
                                 PermanentRoles          = ($AccountRoles.RoleName) -join '; '
-                                HasPermanentGlobalAdmin = ($AccountRoles | Where-Object { $_.RoleName -eq 'Global Administrator' }).Count -gt 0
+                                HasPermanentGlobalAdmin = @($AccountRoles.Where({ $_.RoleName -eq 'Global Administrator' })).Count -gt 0
                                 MatchesNamingPattern    = $User.UserPrincipalName -match $EmergencyAccountPattern -or $User.DisplayName -match $EmergencyAccountPattern
                                 DaysSinceLastSignIn     = if ($LastSignIn -and $LastSignIn -is [datetime]) {
-                                    [math]::Round(((Get-Date) - $LastSignIn).TotalDays, 0)
+                                    [math]::Round(($Now - $LastSignIn).TotalDays, 0)
                                 } else { $null }
                             })
                     }
@@ -300,10 +303,8 @@ function Get-TntPrivilegedRoleReport {
                 }
             }
 
-            # Calculate summary statistics
-            $UniquePrivilegedUsers = ($PermanentAssignments | Where-Object { $_.PrincipalType -eq 'user' } | Select-Object PrincipalId -Unique).Count
+            $UniquePrivilegedUsers = ($PermanentAssignments.Where({ $_.PrincipalType -eq 'user' }) | Select-Object PrincipalId -Unique).Count
 
-            # Generate summary
             $Summary = [PSCustomObject]@{
                 TenantId                  = $TenantId
                 ReportGeneratedDate       = Get-Date
@@ -312,8 +313,8 @@ function Get-TntPrivilegedRoleReport {
                 UniquePrivilegedUsers     = $UniquePrivilegedUsers
                 EmergencyAccessAccounts   = $EmergencyAccounts.Count
                 RoleActivationsInPeriod   = $RoleActivations.Count
-                GlobalAdministrators      = ($PermanentAssignments | Where-Object { $_.RoleName -eq 'Global Administrator' }).Count
-                CustomRoles               = ($PermanentAssignments | Where-Object { $_.RoleType -eq 'Custom' } | Select-Object RoleId -Unique).Count
+                GlobalAdministrators      = $PermanentAssignments.Where({ $_.RoleName -eq 'Global Administrator' }).Count
+                CustomRoles               = ($PermanentAssignments.Where({ $_.RoleType -eq 'Custom' }) | Select-Object RoleId -Unique).Count
             }
 
             Write-Information "Privileged role report completed - $($PermanentAssignments.Count) permanent assignments found" -InformationAction Continue
@@ -323,12 +324,12 @@ function Get-TntPrivilegedRoleReport {
                 PermanentAssignments    = $PermanentAssignments | Sort-Object RoleName, PrincipalName
                 RoleActivations         = $RoleActivations | Sort-Object ActivityDateTime -Descending
                 EmergencyAccessAccounts = $EmergencyAccounts | Sort-Object DisplayName
-                AssignmentsByRole       = $PermanentAssignments | Group-Object RoleName | ForEach-Object {
-                    [PSCustomObject]@{
-                        RoleName         = $_.Name
-                        TotalAssignments = $_.Count
-                    }
-                } | Sort-Object TotalAssignments -Descending
+                AssignmentsByRole       = ($PermanentAssignments | Group-Object RoleName).ForEach({
+                        [PSCustomObject]@{
+                            RoleName         = $_.Name
+                            TotalAssignments = $_.Count
+                        }
+                    }) | Sort-Object TotalAssignments -Descending
             }
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(

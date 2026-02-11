@@ -133,14 +133,22 @@ function Get-CachedUsers {
         try {
             # Determine which properties to fetch
             $PropertiesToFetch = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-            $DefaultProperties | ForEach-Object { [void]$PropertiesToFetch.Add($_) }
+            foreach ($Property in $DefaultProperties) { [void]$PropertiesToFetch.Add($Property) }
 
             if ($RequiredProperties) {
-                $RequiredProperties | ForEach-Object { [void]$PropertiesToFetch.Add($_) }
+                foreach ($Property in $RequiredProperties) { [void]$PropertiesToFetch.Add($Property) }
             }
 
             # Determine if beta API is needed
-            $NeedsBetaAPI = $ForceBetaAPI -or ($PropertiesToFetch | Where-Object { $_ -in $BetaOnlyProperties })
+            $NeedsBetaAPI = $ForceBetaAPI
+            if (-not $NeedsBetaAPI) {
+                foreach ($Property in $PropertiesToFetch) {
+                    if ($Property -in $BetaOnlyProperties) {
+                        $NeedsBetaAPI = $true
+                        break
+                    }
+                }
+            }
 
             # Check existing cache
             $ExistingCache = $script:UserCache[$CacheKey]
@@ -303,7 +311,6 @@ function Get-CachedUsers {
 
                 if ($UserPrincipalNames) {
                     foreach ($UPN in $UserPrincipalNames) {
-                        # PowerShell @{} hashtables are case-insensitive by default
                         if ($UPN -and -not $ExistingCache.LookupByUPN.ContainsKey($UPN)) {
                             $MissingUPNs.Add($UPN)
                         }

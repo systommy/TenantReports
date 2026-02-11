@@ -150,9 +150,6 @@
 
     Shows what actions would be performed without making any changes.
 
-.INPUTS
-    None. This script does not accept pipeline input.
-
 .OUTPUTS
     PSCustomObject
         Returns an object containing:
@@ -321,7 +318,7 @@ process {
         $RequiredAccess = foreach ($AppId in $Permissions.Keys) {
             @{
                 ResourceAppId  = $AppId
-                ResourceAccess = $Permissions[$AppId] | ForEach-Object { @{ Id = $_; Type = 'Role' } }
+                ResourceAccess = $Permissions[$AppId].ForEach({ @{ Id = $_; Type = 'Role' } })
             }
         }
         Update-MgApplication -ApplicationId $App.Id -RequiredResourceAccess $RequiredAccess
@@ -333,7 +330,7 @@ process {
         $RequiredAccess = foreach ($AppId in $Permissions.Keys) {
             @{
                 ResourceAppId  = $AppId
-                ResourceAccess = $Permissions[$AppId] | ForEach-Object { @{ Id = $_; Type = 'Role' } }
+                ResourceAccess = $Permissions[$AppId].ForEach({ @{ Id = $_; Type = 'Role' } })
             }
         }
         $App = New-MgApplication -DisplayName $ApplicationName -SignInAudience 'AzureADMyOrg' -RequiredResourceAccess $RequiredAccess
@@ -443,7 +440,7 @@ process {
             $Existing = Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $Sp.Id -All -ErrorAction SilentlyContinue
 
             foreach ($RoleId in $Permissions[$ResourceAppId]) {
-                if ($Existing | Where-Object { $_.AppRoleId -eq $RoleId -and $_.ResourceId -eq $ResourceSp.Id }) {
+                if (@($Existing).Where({ $_.AppRoleId -eq $RoleId -and $_.ResourceId -eq $ResourceSp.Id }).Count -gt 0) {
                     $GrantResults[$KeyName].Granted++
                     continue
                 }
@@ -466,7 +463,10 @@ process {
     #endregion
 
     #region Directory Roles
-    $RoleResults = @{ Assigned = @(); Failed = @() }
+     = @{
+        Assigned = [System.Collections.Generic.List[string]]::new()
+        Failed   = [System.Collections.Generic.List[string]]::new()
+    }
 
     if ($AssignDirectoryRoles -and $PSCmdlet.ShouldProcess('Directory Roles', 'Assign')) {
         Write-Host '[*] Assigning directory roles...' -ForegroundColor Cyan
@@ -490,14 +490,14 @@ process {
                     
                     Write-Host "[+] $RoleName : " -ForegroundColor Green -NoNewline
                     Write-Host 'Assigned' -ForegroundColor White
-                    $RoleResults.Assigned += $RoleName
+                    [void]$RoleResults.Assigned.Add($RoleName)
                 }
                 catch {
                     # 400 BadRequest with "already exist" is a success state in an idempotent script
                     if ($_.Exception.Message -like "*already exist*" -or $_.Exception.Message -like "*400*") {
                         Write-Host "[+] $RoleName : " -ForegroundColor Green -NoNewline
                         Write-Host 'Already assigned' -ForegroundColor White
-                        $RoleResults.Assigned += $RoleName
+                        [void]$RoleResults.Assigned.Add($RoleName)
                     }
                     else {
                         # Re-throw genuine errors (Access Denied, etc.)
@@ -508,7 +508,7 @@ process {
             catch {
                 Write-Host "[-] $RoleName : " -ForegroundColor Red -NoNewline
                 Write-Host "Failed - $($_.Exception.Message)" -ForegroundColor White
-                $RoleResults.Failed += $RoleName
+                [void]$RoleResults.Failed.Add($RoleName)
             }
         }
     }

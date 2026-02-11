@@ -7,8 +7,6 @@ function Get-TntConditionalAccessReport {
         This function connects to Microsoft Graph using an app registration and generates comprehensive reports
         about Conditional Access policies. It identifies policy coverage gaps and analyzes effectiveness.
 
-        in PowerShell scripts.
-
     .PARAMETER TenantId
         The Azure AD Tenant ID (GUID) to connect to.
 
@@ -66,14 +64,12 @@ function Get-TntConditionalAccessReport {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSCustomObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(ParameterSetName = 'Interactive')]
@@ -81,26 +77,21 @@ function Get-TntConditionalAccessReport {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Switch to exclude disabled policies from the report.
         [Parameter()]
         [switch]$ExcludeDisabledPolicies,
 
-        # Optional state filter for policies.
         [Parameter()]
         [ValidateSet('Enabled', 'Disabled', 'All')]
         [string]$FilterByState = 'All'
@@ -122,13 +113,13 @@ function Get-TntConditionalAccessReport {
             
             # Filter based on state if requested
             $PoliciesToAnalyze = switch ($FilterByState) {
-                'Enabled' { $AllPolicies | Where-Object { $_.State -eq 'enabled' } }
-                'Disabled' { $AllPolicies | Where-Object { $_.State -eq 'disabled' } }
-                'All' { $AllPolicies }
+                'Enabled'  { $AllPolicies.Where({ $_.State -eq 'enabled' }) }
+                'Disabled' { $AllPolicies.Where({ $_.State -eq 'disabled' }) }
+                'All'      { $AllPolicies }
             }
 
             if ($ExcludeDisabledPolicies -and $FilterByState -eq 'All') {
-                $PoliciesToAnalyze = $PoliciesToAnalyze | Where-Object { $_.State -eq 'enabled' }
+                $PoliciesToAnalyze = $PoliciesToAnalyze.Where({ $_.State -eq 'enabled' })
             }
 
             Write-Verbose "Found $($PoliciesToAnalyze.Count) policies to analyze"
@@ -155,43 +146,43 @@ function Get-TntConditionalAccessReport {
             $SpecialAppValues      = @('All', 'None', 'Office365', 'MicrosoftAdminPortals')
             $SpecialLocationValues = @('All', 'AllTrusted', 'None', '00000000-0000-0000-0000-000000000000')
 
-            # GUID pattern for validation
-            $GuidPattern = '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+            # Compiled GUID regex for validation (avoids per-iteration pattern parsing)
+            [regex]$GuidRegex = [regex]::new('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$', 'Compiled')
 
             foreach ($Policy in $PoliciesToAnalyze) {
                 $Conditions = $Policy.Conditions
                 if ($Conditions.Users) {
                     foreach ($Id in $Conditions.Users.IncludeUsers) {
-                        if ($Id -and $Id -notin $SpecialUserValues -and $Id -match $GuidPattern) {
+                        if ($Id -and $Id -notin $SpecialUserValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllUserIds.Add($Id)
                         }
                     }
                     foreach ($Id in $Conditions.Users.ExcludeUsers) {
-                        if ($Id -and $Id -notin $SpecialUserValues -and $Id -match $GuidPattern) {
+                        if ($Id -and $Id -notin $SpecialUserValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllUserIds.Add($Id)
                         }
                     }
                     foreach ($Id in $Conditions.Users.IncludeGroups) {
-                        if ($Id -and $Id -match $GuidPattern) { [void]$AllGroupIds.Add($Id) }
+                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllGroupIds.Add($Id) }
                     }
                     foreach ($Id in $Conditions.Users.ExcludeGroups) {
-                        if ($Id -and $Id -match $GuidPattern) { [void]$AllGroupIds.Add($Id) }
+                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllGroupIds.Add($Id) }
                     }
                     foreach ($Id in $Conditions.Users.IncludeRoles) {
-                        if ($Id -and $Id -match $GuidPattern) { [void]$AllRoleIds.Add($Id) }
+                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllRoleIds.Add($Id) }
                     }
                     foreach ($Id in $Conditions.Users.ExcludeRoles) {
-                        if ($Id -and $Id -match $GuidPattern) { [void]$AllRoleIds.Add($Id) }
+                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllRoleIds.Add($Id) }
                     }
                 }
                 if ($Conditions.Applications) {
                     foreach ($Id in $Conditions.Applications.IncludeApplications) {
-                        if ($Id -and $Id -notin $SpecialAppValues -and $Id -match $GuidPattern) {
+                        if ($Id -and $Id -notin $SpecialAppValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllAppIds.Add($Id)
                         }
                     }
                     foreach ($Id in $Conditions.Applications.ExcludeApplications) {
-                        if ($Id -and $Id -notin $SpecialAppValues -and $Id -match $GuidPattern) {
+                        if ($Id -and $Id -notin $SpecialAppValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllAppIds.Add($Id)
                         }
                     }
@@ -294,16 +285,16 @@ function Get-TntConditionalAccessReport {
                 }
 
                 # Resolve GUIDs to display names
-                $IncludedUsers     = @($IncludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
-                $ExcludedUsers     = @($ExcludedUsersRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues } | Where-Object { $_ })
-                $IncludedGroups    = @($IncludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
-                $ExcludedGroups    = @($ExcludedGroupsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $GroupLookup } | Where-Object { $_ })
-                $IncludedApps      = @($IncludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
-                $ExcludedApps      = @($ExcludedAppsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues } | Where-Object { $_ })
-                $IncludedLocations = @($IncludedLocationsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues } | Where-Object { $_ })
-                $ExcludedLocations = @($ExcludedLocationsRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues } | Where-Object { $_ })
-                $IncludedRoles     = @($IncludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
-                $ExcludedRoles     = @($ExcludedRolesRaw | ForEach-Object { Resolve-DisplayName -Id $_ -Lookup $RoleLookup } | Where-Object { $_ })
+                $IncludedUsers     = @($IncludedUsersRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues }).Where({ $_ }))
+                $ExcludedUsers     = @($ExcludedUsersRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $UserLookup -SpecialValues $SpecialUserValues }).Where({ $_ }))
+                $IncludedGroups    = @($IncludedGroupsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $GroupLookup }).Where({ $_ }))
+                $ExcludedGroups    = @($ExcludedGroupsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $GroupLookup }).Where({ $_ }))
+                $IncludedApps      = @($IncludedAppsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues }).Where({ $_ }))
+                $ExcludedApps      = @($ExcludedAppsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $AppLookup -SpecialValues $SpecialAppValues }).Where({ $_ }))
+                $IncludedLocations = @($IncludedLocationsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues }).Where({ $_ }))
+                $ExcludedLocations = @($ExcludedLocationsRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $LocationLookup -SpecialValues $SpecialLocationValues }).Where({ $_ }))
+                $IncludedRoles     = @($IncludedRolesRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $RoleLookup }).Where({ $_ }))
+                $ExcludedRoles     = @($ExcludedRolesRaw.ForEach({ Resolve-DisplayName -Id $_ -Lookup $RoleLookup }).Where({ $_ }))
 
                 # Analyze grant controls
                 $GrantControls           = $Policy.GrantControls
@@ -378,7 +369,7 @@ function Get-TntConditionalAccessReport {
                 $PolicyAnalysis.Add($PolicyEntry)
             }
 
-            # Create comprehensive report using single-pass accumulation
+            # Create report using single-pass accumulation
             $PolicyStats = @{
                 EnabledPolicies    = 0
                 DisabledPolicies   = 0
@@ -432,13 +423,13 @@ function Get-TntConditionalAccessReport {
                 Summary          = $Summary
                 PolicyAnalysis   = $PolicyAnalysis | Sort-Object State, PolicyName
                 NamedLocations   = $NamedLocations ?? @()
-                PolicyByScenario = $PolicyAnalysis | Group-Object PolicyScenario | ForEach-Object {
+                PolicyByScenario = ($PolicyAnalysis | Group-Object PolicyScenario).ForEach({
                     [PSCustomObject]@{
                         Scenario    = $_.Name
                         PolicyCount = $_.Count
                         Policies    = $_.Group | Select-Object PolicyName, State
                     }
-                }
+                })
             }
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(
@@ -449,11 +440,9 @@ function Get-TntConditionalAccessReport {
             )
             $PSCmdlet.ThrowTerminatingError($errorRecord)
         } finally {
-            # Cleanup connections
             if ($ConnectionInfo.ShouldDisconnect) {
                 Disconnect-TntGraphSession -ConnectionState $ConnectionInfo
             }
         }
     }
 }
-

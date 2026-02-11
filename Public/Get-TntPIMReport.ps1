@@ -27,9 +27,6 @@ function Get-TntPIMReport {
 
         Generates a comprehensive PIM report for eligible and active role assignments.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a PIM report object with:
@@ -82,7 +79,6 @@ function Get-TntPIMReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -93,7 +89,6 @@ function Get-TntPIMReport {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
@@ -104,9 +99,15 @@ function Get-TntPIMReport {
             # Get all role definitions to identify privileged roles
             Write-Verbose 'Retrieving role definitions...'
             $RoleDefinitions = Get-MgRoleManagementDirectoryRoleDefinition -All -ErrorAction Stop
+
             # Client-side filtering required: Graph API does not support filtering by DisplayName array or IsBuiltIn property
-            $PrivilegedRoles = $RoleDefinitions | Where-Object {
-                $_.DisplayName -in $script:PrivilegedRoleNames -or $_.IsBuiltIn -eq $false
+            $PrivilegedRoles = @($RoleDefinitions.Where({
+                    $_.DisplayName -in $script:PrivilegedRoleNames -or $_.IsBuiltIn -eq $false
+                }))
+
+            $PrivilegedRoleLookup = @{}
+            foreach ($PrivilegedRole in $PrivilegedRoles) {
+                $PrivilegedRoleLookup[$PrivilegedRole.Id] = $PrivilegedRole
             }
 
             Write-Verbose "Identified $($PrivilegedRoles.Count) privileged roles"
@@ -117,7 +118,7 @@ function Get-TntPIMReport {
                 $EligibleSchedules = Get-MgRoleManagementDirectoryRoleEligibilitySchedule -All -ExpandProperty Principal -ErrorAction Stop
 
                 foreach ($Schedule in $EligibleSchedules) {
-                    $Role = $PrivilegedRoles | Where-Object { $_.Id -eq $Schedule.RoleDefinitionId }
+                    $Role = $PrivilegedRoleLookup[$Schedule.RoleDefinitionId]
                     if ($Role) {
                         $Assignment = ConvertTo-PIMAssignment -Schedule $Schedule -Role $Role -AssignmentType 'PIM Eligible'
                         $PIMEligibleAssignments.Add($Assignment)
@@ -150,7 +151,7 @@ function Get-TntPIMReport {
                 $ActiveSchedules = Get-MgRoleManagementDirectoryRoleAssignmentSchedule -All -ExpandProperty Principal -ErrorAction Stop
 
                 foreach ($Schedule in $ActiveSchedules) {
-                    $Role = $PrivilegedRoles | Where-Object { $_.Id -eq $Schedule.RoleDefinitionId }
+                    $Role = $PrivilegedRoleLookup[$Schedule.RoleDefinitionId]
                     if ($Role) {
                         $Assignment = ConvertTo-PIMAssignment -Schedule $Schedule -Role $Role -AssignmentType 'PIM Active'
                         $PIMActiveAssignments.Add($Assignment)
@@ -177,11 +178,9 @@ function Get-TntPIMReport {
                 }
             }
 
-            # Calculate summary statistics
             $TotalPIMAssignments = $PIMEligibleAssignments.Count + $PIMActiveAssignments.Count
-            $UniqueEligibleUsers = ($PIMEligibleAssignments | Where-Object { $_.PrincipalType -eq 'user' } | Select-Object PrincipalId -Unique).Count
+            $UniqueEligibleUsers = ($PIMEligibleAssignments.Where({ $_.PrincipalType -eq 'user' }) | Select-Object PrincipalId -Unique).Count
 
-            # Generate summary
             $Summary = [PSCustomObject]@{
                 TenantId                     = $TenantId
                 ReportGeneratedDate          = Get-Date
@@ -189,8 +188,8 @@ function Get-TntPIMReport {
                 PIMEligibleAssignments       = $PIMEligibleAssignments.Count
                 PIMActiveAssignments         = $PIMActiveAssignments.Count
                 UniqueEligibleUsers          = $UniqueEligibleUsers
-                EligibleGlobalAdministrators = ($PIMEligibleAssignments | Where-Object { $_.RoleName -eq 'Global Administrator' }).Count
-                ActiveGlobalAdministrators   = ($PIMActiveAssignments | Where-Object { $_.RoleName -eq 'Global Administrator' }).Count
+                EligibleGlobalAdministrators = $PIMEligibleAssignments.Where({ $_.RoleName -eq 'Global Administrator' }).Count
+                ActiveGlobalAdministrators   = $PIMActiveAssignments.Where({ $_.RoleName -eq 'Global Administrator' }).Count
             }
 
             Write-Information "PIM report completed - $($TotalPIMAssignments) total assignments ($($PIMEligibleAssignments.Count) eligible, $($PIMActiveAssignments.Count) active)" -InformationAction Continue
@@ -199,13 +198,13 @@ function Get-TntPIMReport {
                 Summary                = $Summary
                 PIMEligibleAssignments = $PIMEligibleAssignments | Sort-Object RoleName, PrincipalName
                 PIMActiveAssignments   = $PIMActiveAssignments | Sort-Object ExpirationDateTime, RoleName
-                AssignmentsByRole      = ($PIMEligibleAssignments + $PIMActiveAssignments) | Group-Object RoleName | ForEach-Object {
-                    [PSCustomObject]@{
-                        RoleName      = $_.Name
-                        EligibleCount = ($_.Group | Where-Object { $_.AssignmentType -eq 'PIM Eligible' }).Count
-                        ActiveCount   = ($_.Group | Where-Object { $_.AssignmentType -eq 'PIM Active' }).Count
-                    }
-                } | Sort-Object { $_.EligibleCount + $_.ActiveCount } -Descending
+                AssignmentsByRole      = (($PIMEligibleAssignments + $PIMActiveAssignments) | Group-Object RoleName).ForEach({
+                        [PSCustomObject]@{
+                            RoleName      = $_.Name
+                            EligibleCount = @($_.Group.Where({ $_.AssignmentType -eq 'PIM Eligible' })).Count
+                            ActiveCount   = @($_.Group.Where({ $_.AssignmentType -eq 'PIM Active' })).Count
+                        }
+                    }) | Sort-Object { $_.EligibleCount + $_.ActiveCount } -Descending
             }
         } catch {
             $errorRecord = [System.Management.Automation.ErrorRecord]::new(

@@ -49,15 +49,6 @@ function Invoke-TntReport {
     .PARAMETER TenantName
         Optional friendly name for the tenant (used in report metadata).
 
-    .PARAMETER WsClientId
-        WithSecure Elements API OAuth2 client ID for endpoint security data.
-
-    .PARAMETER WsClientSecret
-        WithSecure Elements API client secret.
-
-    .PARAMETER WsOrganizationName
-        WithSecure organization name to query.
-
     .EXAMPLE
         Invoke-TntReport -TenantId "guid" -ClientId "guid" -ClientSecret $secret
 
@@ -150,7 +141,6 @@ function Invoke-TntReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         # Note: RiskyUsers and Defender sections will be skipped as they require application permissions.
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
@@ -183,14 +173,14 @@ function Invoke-TntReport {
         [Parameter()]
         [ArgumentCompleter({
                 param($Command, $Parameter, $WordToComplete, $CommandAst, $FakeBoundParams)
-                Get-ValidSecurityReportSection | Where-Object { $_ -like "$WordToComplete*" }
+                (Get-ValidSecurityReportSection).Where({ $_ -like "$WordToComplete*" })
             })]
         [string[]]$IncludeSections,
 
         [Parameter()]
         [ArgumentCompleter({
                 param($Command, $Parameter, $WordToComplete, $CommandAst, $FakeBoundParams)
-                Get-ValidSecurityReportSection | Where-Object { $_ -like "$WordToComplete*" }
+                (Get-ValidSecurityReportSection).Where({ $_ -like "$WordToComplete*" })
             })]
         [string[]]$ExcludeSections,
 
@@ -260,9 +250,9 @@ function Invoke-TntReport {
 
         # Initialize section status tracking and error collection
         $SectionStatus = @{}
-        $Errors = @()
+        $Errors = [System.Collections.Generic.List[PSObject]]::new()
 
-        # Build hashtable first (no object copying - PERFORMANCE OPTIMIZATION)
+        # Build hashtable first (no object copying
         $ReportData = [ordered]@{
             ReportMetadata = [PSCustomObject]@{
                 TenantId             = $TenantId
@@ -394,10 +384,10 @@ function Invoke-TntReport {
         # Skip sections that require application permissions when using interactive auth
         $InteractiveIncompatibleSections = @('RiskyUsers', 'Defender')
         if ($script:IsInteractiveAuth) {
-            $SkippedSections = @()
+            $SkippedSections = [System.Collections.Generic.List[string]]::new()
             foreach ($Section in $InteractiveIncompatibleSections) {
                 if ($Section -in $SectionsToRun) {
-                    $SkippedSections += $Section
+                    [void]$SkippedSections.Add($Section)
                     $SectionStatus[$Section] = 'Skipped (requires application permissions)'
                     Write-Warning "Section '$Section' requires application permissions and will be skipped with interactive authentication."
                 }
@@ -416,7 +406,7 @@ function Invoke-TntReport {
         function Test-TokenRefreshNeeded {
             param([PSCustomObject]$TokenInfo)
             if ($null -eq $TokenInfo -or $null -eq $TokenInfo.ExpiresAt) { return $true }
-            return ($TokenInfo.ExpiresAt - (Get-Date)).TotalMinutes -lt 10
+            return ($TokenInfo.ExpiresAt - [datetime]::Now).TotalMinutes -lt 10
         }
 
         # Execute selected sections with progress tracking
@@ -443,15 +433,14 @@ function Invoke-TntReport {
                 Write-Warning $_.Exception.Message
                 $ReportData[$SectionName] = $null
                 $SectionStatus[$SectionName] = 'Failed'
-                $Errors += [PSCustomObject]@{
+                $Errors.Add([PSCustomObject]@{
                     Section      = $SectionName
                     ErrorMessage = $_.Exception.Message
                     Timestamp    = Get-Date
-                }
+                })
             }
         }
 
-        # REPORT FINALIZATION
         Write-Progress -Activity 'Generating Report' -Status 'Finalizing Report' -PercentComplete 95
 
         $ReportEndTime = Get-Date
@@ -463,7 +452,7 @@ function Invoke-TntReport {
         $ReportData.ReportMetadata.Errors = $Errors
 
         # Surface section failures
-        $Failed = $SectionStatus.GetEnumerator() | Where-Object { $_.Value -eq 'Failed' }
+        $Failed = @($SectionStatus.GetEnumerator().Where({ $_.Value -eq 'Failed' }))
         if ($Failed) {
             Write-Warning "Failed sections: $(($Failed.Key) -join ', ')"
             Write-Warning "See `$report.ReportMetadata.Errors for details"
@@ -504,4 +493,3 @@ function Invoke-TntReport {
         }
     }
 }
-

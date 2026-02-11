@@ -8,8 +8,6 @@ function Get-TntM365UserReport {
         information for all users in the tenant. It provides insights into user licensing, authentication
         methods, last sign-in activity, password changes, and MFA device registrations.
 
-        in PowerShell scripts.
-
     .PARAMETER TenantId
         The Azure AD Tenant ID (GUID) to connect to.
 
@@ -79,14 +77,12 @@ function Get-TntM365UserReport {
     [CmdletBinding(DefaultParameterSetName = 'ClientSecret')]
     [OutputType([System.Management.Automation.PSCustomObject])]
     param(
-        # Tenant ID of the Microsoft 365 tenant.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
         [ValidateNotNullOrEmpty()]
         [string]$TenantId,
 
-        # Application (client) ID of the registered app.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [Parameter(Mandatory = $false, ParameterSetName = 'Interactive')]
@@ -94,35 +90,28 @@ function Get-TntM365UserReport {
         [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')]
         [string]$ClientId,
 
-        # Client secret credential when using secret-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'ClientSecret')]
         [Alias('ApplicationSecret')]
         [ValidateNotNullOrEmpty()]
         [SecureString]$ClientSecret,
 
-        # Certificate thumbprint for certificate-based authentication.
         [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, ParameterSetName = 'Certificate')]
         [ValidateNotNullOrEmpty()]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
-        # Number of days of sign-in history to analyze.
         [Parameter()]
         [ValidateRange(1, 365)]
         [int]$SignInLookbackDays = 90,
 
-        # Switch to exclude disabled accounts.
         [Parameter()]
         [switch]$ExcludeDisabledUsers,
 
-        # Switch to exclude guest accounts.
         [Parameter()]
         [switch]$ExcludeGuestUsers,
 
-        # Maximum number of users to process (testing limit).
         [Parameter()]
         [ValidateRange(1, 100000)]
         [int]$MaxUsers
@@ -131,8 +120,8 @@ function Get-TntM365UserReport {
     begin {
         # Load .CSV with SKU Translation table for retrieving friendly license names
         $SkuHashTable = @{}
-        Get-SkuTranslationTable | Group-Object GUID | ForEach-Object {
-            $SkuHashTable[$_.Name] = ($_.Group | Select-Object -First 1).Product_Display_Name
+        foreach ($SkuGroup in (Get-SkuTranslationTable | Group-Object GUID)) {
+            $SkuHashTable[$SkuGroup.Name] = ($SkuGroup.Group | Select-Object -First 1).Product_Display_Name
         }
 
         # MFA Method types array for individual property mapping
@@ -160,7 +149,6 @@ function Get-TntM365UserReport {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
@@ -176,10 +164,10 @@ function Get-TntM365UserReport {
             # Apply initial filters
             $FilteredUsers = $AllUsers
             if ($ExcludeDisabledUsers) {
-                $FilteredUsers = $FilteredUsers | Where-Object { $_.AccountEnabled -eq $true }
+                $FilteredUsers = $FilteredUsers.Where({ $_.AccountEnabled -eq $true })
             }
             if ($ExcludeGuestUsers) {
-                $FilteredUsers = $FilteredUsers | Where-Object { $_.UserType -ne 'Guest' }
+                $FilteredUsers = $FilteredUsers.Where({ $_.UserType -ne 'Guest' })
             }
             if ($MaxUsers) {
                 $FilteredUsers = $FilteredUsers | Select-Object -First $MaxUsers
@@ -220,6 +208,9 @@ function Get-TntM365UserReport {
             # Process each user and combine data
             $UserSecurityReport = [System.Collections.Generic.List[PSObject]]::new()
 
+            # Cache current time outside the loop to avoid repeated Get-Date calls
+            $Now = [datetime]::Now
+
             foreach ($User in $FilteredUsers) {
                 try {
                     # Get corresponding MFA data
@@ -227,19 +218,19 @@ function Get-TntM365UserReport {
 
                     # Translate assigned licenses to friendly name
                     try {
-                        $UserLicenses = $User.AssignedLicenses | ForEach-Object {
+                        $UserLicenses = $User.AssignedLicenses.ForEach({
                             Resolve-SkuName -SkuId $_.SkuId -SkuHashTable $SkuHashTable
-                        } | Where-Object { $_ } | Sort-Object -Unique -ErrorAction Stop
+                        }).Where({ $_ }) | Sort-Object -Unique -ErrorAction Stop
                     } catch {
                         Write-Error 'Could not translate license with SKU Translation table. Falling back to native Graph method.'
-                        $UserLicenses = $User.AssignedLicenses | ForEach-Object {
+                        $UserLicenses = $User.AssignedLicenses.ForEach({
                             $SkuId = $_.SkuId
                             if ($SubscribedSkus.ContainsKey($SkuId)) {
                                 $SubscribedSkus[$SkuId]
                             } else {
                                 "Unknown License ($SkuId)"
                             }
-                        }
+                        })
                     }
 
                     # Parse sign-in dates safely
@@ -250,7 +241,7 @@ function Get-TntM365UserReport {
                     if ($User.SignInActivity.LastSignInDateTime) {
                         try {
                             $LastSignInDate = [DateTime]$User.SignInActivity.LastSignInDateTime
-                            $DaysSinceLastSignIn = [Math]::Abs((New-TimeSpan -Start $LastSignInDate -End (Get-Date)).Days)
+                            $DaysSinceLastSignIn = [Math]::Abs(($Now - $LastSignInDate).Days)
                         } catch {
                             $LastSignInDate = 'Invalid Date'
                             $DaysSinceLastSignIn = 'N/A'
@@ -267,7 +258,7 @@ function Get-TntM365UserReport {
                     if ($User.SignInActivity.lastSuccessfulSignInDateTime) {
                         try {
                             $LastSuccessfulSignInDate = [DateTime]$User.SignInActivity.lastSuccessfulSignInDateTime
-                            $DaysSinceLastSuccessfulSignIn = [Math]::Abs((New-TimeSpan -Start $LastSuccessfulSignInDate -End (Get-Date)).Days)
+                            $DaysSinceLastSuccessfulSignIn = [Math]::Abs(($Now - $LastSuccessfulSignInDate).Days)
                         } catch {
                             $LastSuccessfulSignInDate = 'Invalid Date'
                             $DaysSinceLastSuccessfulSignIn = 'N/A'
@@ -284,7 +275,7 @@ function Get-TntM365UserReport {
                     if ($User.LastPasswordChangeDateTime) {
                         try {
                             $LastPasswordChangeDate = [DateTime]$User.LastPasswordChangeDateTime
-                            $DaysSincePasswordChange = [Math]::Abs((New-TimeSpan -Start $LastPasswordChangeDate -End (Get-Date)).Days)
+                            $DaysSincePasswordChange = [Math]::Abs(($Now - $LastPasswordChangeDate).Days)
                         } catch {
                             $LastPasswordChangeDate = 'Invalid Date'
                             $DaysSincePasswordChange = 'N/A'
@@ -316,7 +307,6 @@ function Get-TntM365UserReport {
                         $MfaMethodProperties[$PropertyName] = $MfaMethods -contains $Method.type
                     }
 
-                    # Create comprehensive user security entry
                     $UserEntry = [PSCustomObject]@{
                         #UserId = $User.Id
                         DisplayName                        = $User.DisplayName
@@ -388,7 +378,6 @@ function Get-TntM365UserReport {
                 }
             }
 
-            # Generate comprehensive summary statistics using single-pass accumulation
             $Stats = @{
                 EnabledUsers             = 0
                 DisabledUsers            = 0
@@ -465,11 +454,11 @@ function Get-TntM365UserReport {
             [PSCustomObject]@{
                 Summary           = $Summary
                 UserDetails       = $UserSecurityReport | Sort-Object DisplayName
-                MfaMethodAnalysis = $UserSecurityReport | Where-Object { $_.MfaMethodsRegistered } |
+                MfaMethodAnalysis = $UserSecurityReport.Where({ $_.MfaMethodsRegistered }) |
                     Group-Object { $_.MfaMethodsRegistered } |
                     Select-Object Name, Count |
                     Sort-Object Count -Descending
-                LicenseAnalysis   = $UserSecurityReport | Where-Object { $_.AssignedLicenses } |
+                LicenseAnalysis   = $UserSecurityReport.Where({ $_.AssignedLicenses }) |
                     Group-Object { $_.AssignedLicenses } |
                     Select-Object Name, Count |
                     Sort-Object Count -Descending
@@ -489,4 +478,3 @@ function Get-TntM365UserReport {
         }
     }
 }
-

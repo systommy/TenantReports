@@ -101,7 +101,7 @@ function Clear-SecureMemory {
             }
         }
 
-        # Security cleanup: clear any lingering connection-related variables from script scope
+        # Clear any lingering connection-related variables from script scope
         $ConnectionVariables = @(
             'AccessToken',
             'GraphHeader',

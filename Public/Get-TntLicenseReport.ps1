@@ -25,9 +25,6 @@ function Get-TntLicenseReport {
 
         Retrieves and displays license allocation information.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -74,7 +71,6 @@ function Get-TntLicenseReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -84,8 +80,8 @@ function Get-TntLicenseReport {
         $SkuHashTable = @{}
         $SkuTable = Get-SkuTranslationTable
         if ($SkuTable) {
-            $SkuTable | Group-Object GUID | ForEach-Object {
-                $SkuHashTable[$_.Name] = ($_.Group | Select-Object -First 1).Product_Display_Name
+            foreach ($SkuGroup in ($SkuTable | Group-Object GUID)) {
+                $SkuHashTable[$SkuGroup.Name] = ($SkuGroup.Group | Select-Object -First 1).Product_Display_Name
             }
         } else {
             Write-Verbose "SKU Translation Table not available."
@@ -103,7 +99,7 @@ function Get-TntLicenseReport {
             Write-Verbose 'Retrieving subscription and license information...'
             $SubscribedSkus = Get-MgSubscribedSku -All -ErrorAction Stop
 
-            $LicenseData = $SubscribedSkus | ForEach-Object {
+            $LicenseData = $SubscribedSkus.ForEach({
                 # Translate SKU ID to friendly name
                 $ResolvedName = Resolve-SkuName -SkuId $_.SkuId -SkuHashTable $SkuHashTable
                 $FriendlyName = if ($ResolvedName -eq $_.SkuId) {
@@ -131,7 +127,7 @@ function Get-TntLicenseReport {
                     } else { 0 }
                     ServicePlansCount = $_.ServicePlans.Count
                 }
-            } | Sort-Object FriendlyName
+            }) | Sort-Object FriendlyName
 
             # Calculate summary statistics
             $TotalPrepaid = ($LicenseData | Measure-Object -Property PrepaidUnits -Sum).Sum
@@ -140,7 +136,7 @@ function Get-TntLicenseReport {
 
             $Summary = [PSCustomObject]@{
                 TotalSubscriptions     = if ($LicenseData) { $LicenseData.Count } else { 0 }
-                ActiveSubscriptions    = if ($LicenseData) { ($LicenseData | Where-Object { $_.CapabilityStatus -eq 'Enabled' }).Count } else { 0 }
+                ActiveSubscriptions    = if ($LicenseData) { $LicenseData.Where({ $_.CapabilityStatus -eq 'Enabled' }).Count } else { 0 }
                 TotalLicensesPurchased = $TotalPrepaid
                 TotalLicensesAssigned  = $TotalConsumed
                 TotalLicensesAvailable = $TotalAvailable

@@ -33,9 +33,6 @@ function Get-TntAppRegistrationExpiryReport {
 
         Checks for credentials expiring within 90 days.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -81,7 +78,6 @@ function Get-TntAppRegistrationExpiryReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -163,11 +159,11 @@ function Get-TntAppRegistrationExpiryReport {
             } while ($Uri)
 
             # Build summary
-            $Expired = @($Credentials | Where-Object Status -EQ 'Expired')
-            $ExpiringSoon = @($Credentials | Where-Object Status -EQ 'ExpiringSoon')
-            $Valid = @($Credentials | Where-Object Status -EQ 'Valid')
+            $Expired = @($Credentials.Where({ $_.Status -eq 'Expired' }))
+            $ExpiringSoon = @($Credentials.Where({ $_.Status -eq 'ExpiringSoon' }))
+            $Valid = @($Credentials.Where({ $_.Status -eq 'Valid' }))
 
-            $AppsWithIssues = ($Credentials | Where-Object { $_.Status -in 'Expired', 'ExpiringSoon' } |
+            $AppsWithIssues = ($Credentials.Where({ $_.Status -in 'Expired', 'ExpiringSoon' }) |
                 Select-Object -ExpandProperty AppId -Unique).Count
 
             $Summary = [PSCustomObject]@{

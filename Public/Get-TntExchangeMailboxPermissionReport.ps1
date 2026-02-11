@@ -39,9 +39,6 @@ function Get-TntExchangeMailboxPermissionReport {
 
         Retrieves permissions including known system accounts.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -89,7 +86,6 @@ function Get-TntExchangeMailboxPermissionReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive,
 
@@ -106,7 +102,6 @@ function Get-TntExchangeMailboxPermissionReport {
 
     process {
         try {
-            # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
             $ConnectionInfo   = Connect-TntGraphSession @ConnectionParams
 
@@ -130,9 +125,9 @@ function Get-TntExchangeMailboxPermissionReport {
                     try {
                         $Org = Get-MgOrganization -Property VerifiedDomains | Select-Object -First 1
                         if ($Org.VerifiedDomains) {
-                            $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name
+                            $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsInitial }) | Select-Object -First 1 -ExpandProperty Name)
                             if (-not $TenantDomain) {
-                                $TenantDomain = ($Org.VerifiedDomains | Where-Object { $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name
+                                $TenantDomain = ($Org.VerifiedDomains.Where({ $_.IsDefault }) | Select-Object -First 1 -ExpandProperty Name)
                             }
                         }
                     } catch {
@@ -166,14 +161,14 @@ function Get-TntExchangeMailboxPermissionReport {
                 ResultSize = 'Unlimited'
                 Properties = 'RecipientTypeDetails', 'PrimarySmtpAddress', 'DisplayName', 'UserPrincipalName', 'GrantSendOnBehalfTo'
             }
-            $TargetMailboxes = Get-EXOMailbox @MailboxParams | Where-Object {
+            $TargetMailboxes = (Get-EXOMailbox @MailboxParams).Where({
                 $_.RecipientTypeDetails -in @('UserMailbox', 'SharedMailbox', 'RoomMailbox', 'EquipmentMailbox')
-            }
+            })
 
             if (-not $IncludeSystemAccounts) {
-                $TargetMailboxes = $TargetMailboxes | Where-Object {
+                $TargetMailboxes = $TargetMailboxes.Where({
                     $_.Name -notmatch '^(HealthMailbox|SystemMailbox|DiscoverySearchMailbox|Migration\.|FederatedEmail\.)'
-                }
+                })
             }
 
             # Process mailbox delegation permissions using parallel processing
@@ -184,13 +179,13 @@ function Get-TntExchangeMailboxPermissionReport {
                 
                 # FullAccess
                 try {
-                    $FullAccess = Get-EXOMailboxPermission -Identity $Mailbox.UserPrincipalName -ErrorAction SilentlyContinue | Where-Object {
+                    $FullAccess = @(Get-EXOMailboxPermission -Identity $Mailbox.UserPrincipalName -ErrorAction SilentlyContinue).Where({
                         $_.User -notmatch '^(NT AUTHORITY\\SELF|S-1-5-.*)' -and
                         $_.AccessRights -contains 'FullAccess'
-                    }
+                    })
                     
                     if (-not $using:IncludeInheritedPermissions) {
-                        $FullAccess = $FullAccess | Where-Object { -not $_.IsInherited }
+                        $FullAccess = @($FullAccess.Where({ -not $_.IsInherited }))
                     }
 
                     foreach ($Perm in $FullAccess) {
@@ -209,10 +204,10 @@ function Get-TntExchangeMailboxPermissionReport {
 
                 # SendAs
                 try {
-                    $SendAs = Get-EXORecipientPermission -Identity $Mailbox.UserPrincipalName -ErrorAction SilentlyContinue | Where-Object {
+                    $SendAs = @(Get-EXORecipientPermission -Identity $Mailbox.UserPrincipalName -ErrorAction SilentlyContinue).Where({
                         $_.Trustee -notmatch '^(NT AUTHORITY\\SELF|S-1-5-.*)' -and
                         $_.AccessRights -contains 'SendAs'
-                    }
+                    })
 
                     foreach ($Perm in $SendAs) {
                         $Results.Add([PSCustomObject]@{
@@ -234,7 +229,7 @@ function Get-TntExchangeMailboxPermissionReport {
                         $Results.Add([PSCustomObject]@{
                                 MailboxIdentity    = $Mailbox.UserPrincipalName
                                 MailboxDisplayName = $Mailbox.DisplayName
-                                GrantedTo          = $Delegate # Usually returns Name/ID, may need resolution if you want UPN
+                                GrantedTo          = $Delegate
                                 AccessRights       = 'SendOnBehalf'
                                 PermissionType     = 'SendOnBehalf'
                                 IsInherited        = $false
@@ -244,14 +239,14 @@ function Get-TntExchangeMailboxPermissionReport {
 
                 return $Results
 
-            } -ThrottleLimit 20 # Adjust based on tenant size/throttling tolerance
+            } -ThrottleLimit 20
 
             $Summary = [PSCustomObject]@{
                 TotalMailboxesAnalyzed  = $TargetMailboxes.Count
                 TotalPermissionsFound   = $MailboxPermissions.Count
-                FullAccessPermissions   = ($MailboxPermissions | Where-Object PermissionType -EQ 'FullAccess').Count
-                SendAsPermissions       = ($MailboxPermissions | Where-Object PermissionType -EQ 'SendAs').Count
-                SendOnBehalfPermissions = ($MailboxPermissions | Where-Object PermissionType -EQ 'SendOnBehalf').Count
+                FullAccessPermissions   = $MailboxPermissions.Where({ $_.PermissionType -eq 'FullAccess' }).Count
+                SendAsPermissions       = $MailboxPermissions.Where({ $_.PermissionType -eq 'SendAs' }).Count
+                SendOnBehalfPermissions = $MailboxPermissions.Where({ $_.PermissionType -eq 'SendOnBehalf' }).Count
                 UniqueGrantees          = ($MailboxPermissions.GrantedTo | Select-Object -Unique).Count
             }
 

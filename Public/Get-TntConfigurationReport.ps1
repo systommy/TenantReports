@@ -34,9 +34,6 @@ function Get-TntConfigurationReport {
 
         Shows only high-risk settings with recommendations.
 
-    .INPUTS
-        None. This function does not accept pipeline input.
-
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
@@ -86,7 +83,6 @@ function Get-TntConfigurationReport {
         [Alias('Thumbprint')]
         [string]$CertificateThumbprint,
 
-        # Use interactive authentication (no app registration required).
         [Parameter(Mandatory = $true, ParameterSetName = 'Interactive')]
         [switch]$Interactive
     )
@@ -219,16 +215,20 @@ function Get-TntConfigurationReport {
                     Recommendation   = 'Enable admin consent workflow so users can request access to apps they cannot consent to themselves.'
                 })
 
-            # Build report output
             $SettingsByCategory = @{}
-            $SettingsByRisk = @{ High = @(); Medium = @(); Low = @(); Info = @() }
+            $SettingsByRisk = @{
+                High   = [System.Collections.Generic.List[PSCustomObject]]::new()
+                Medium = [System.Collections.Generic.List[PSCustomObject]]::new()
+                Low    = [System.Collections.Generic.List[PSCustomObject]]::new()
+                Info   = [System.Collections.Generic.List[PSCustomObject]]::new()
+            }
 
             foreach ($Setting in $Settings) {
                 if (-not $SettingsByCategory.ContainsKey($Setting.Category)) {
                     $SettingsByCategory[$Setting.Category] = [System.Collections.Generic.List[PSCustomObject]]::new()
                 }
                 $SettingsByCategory[$Setting.Category].Add($Setting)
-                $SettingsByRisk[$Setting.RiskLevel] += $Setting
+                $SettingsByRisk[$Setting.RiskLevel].Add($Setting)
             }
 
             $Summary = [PSCustomObject]@{
