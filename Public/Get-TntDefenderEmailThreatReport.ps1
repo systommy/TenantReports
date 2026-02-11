@@ -87,7 +87,7 @@ function Get-TntDefenderEmailThreatReport {
 
     begin {
         # Calculate date range from DaysBack
-        $EndDate   = [datetime]::Now
+        $EndDate   = [DateTime]::Now
         $StartDate = $EndDate.AddDays(-$DaysBack)
 
         # Map DaysBack to nearest valid API period (D7, D30, D90, D180)
@@ -95,7 +95,7 @@ function Get-TntDefenderEmailThreatReport {
         $ApiPeriod    = $ValidPeriods | Sort-Object { [Math]::Abs($_ - $DaysBack) } | Select-Object -First 1
         Write-Verbose "DaysBack $DaysBack mapped to API period D$ApiPeriod"
 
-        Write-Information "Starting Defender email threat report generation for past $($DaysBack) days..." -InformationAction Continue
+        Write-Information "STARTED  : Defender email threat report generation for past $($DaysBack) days..." -InformationAction Continue
     }
 
     process {
@@ -214,7 +214,7 @@ function Get-TntDefenderEmailThreatReport {
                 Write-Warning "Failed to retrieve threat submission data: $($_.Exception.Message)"
             }
 
-            Write-Information "Defender email threat report completed - $($Report.TotalSecurityAlerts) security alerts found" -InformationAction Continue
+            Write-Information "FINISHED : Defender email threat report - $($Report.TotalSecurityAlerts) security alerts found" -InformationAction Continue
 
             $Report
         } catch {

@@ -97,7 +97,7 @@ function Get-TntExchangeMailboxPermissionReport {
     )
 
     begin {
-        Write-Information 'Starting mailbox delegation permissions analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : Mailbox delegation permissions analysis...' -InformationAction Continue
     }
 
     process {
@@ -250,7 +250,7 @@ function Get-TntExchangeMailboxPermissionReport {
                 UniqueGrantees          = ($MailboxPermissions.GrantedTo | Select-Object -Unique).Count
             }
 
-            Write-Information "Mailbox delegation permissions analysis completed - $($Summary.TotalPermissionsFound) permissions found" -InformationAction Continue
+            Write-Information "FINISHED : Mailbox delegation permissions - $($Summary.TotalPermissionsFound) permissions found" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary            = $Summary

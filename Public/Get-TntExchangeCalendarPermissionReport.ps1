@@ -4,22 +4,16 @@ function Get-TntExchangeCalendarPermissionReport {
         Retrieves calendar folder permissions for all users in Microsoft 365 tenant.
 
     .DESCRIPTION
-        This function retrieves and analyzes calendar folder permissions for all users in a Microsoft 365 tenant
-        with support for multi-language calendar folder names. It identifies who has access to each user's calendar
-        and what level of permissions they have been granted.
+        This function retrieves and analyzes calendar folder permissions for all users in a Microsoft 365 tenant.
+        It identifies who has access to each user's calendar and what level of permissions they have been granted.
+
+        Calendar folders are discovered dynamically via Get-EXOMailboxFolderStatistics -FolderScope Calendar,
+        which returns the actual calendar folder regardless of the mailbox locale. This avoids hardcoding
+        folder names and supports any language without additional configuration.
 
         PERFORMANCE WARNING: This function processes calendar permissions for each user individually using
         Exchange Online PowerShell. For large tenants (>500 users), expect processing times of 10-30 minutes.
         Use -Verbose to monitor progress.
-
-        MULTI-LANGUAGE SUPPORT:
-        Automatically detects calendar folders in multiple languages including:
-        - English (Calendar)
-        - Dutch (Agenda)
-        - French (Calendrier)
-        - German (Kalender)
-        - Spanish/Italian (Calendario)
-        - Portuguese (Calendario)
 
     .PARAMETER TenantId
         The Azure AD Tenant ID to connect to.
@@ -57,10 +51,6 @@ function Get-TntExchangeCalendarPermissionReport {
         Get-TntExchangeCalendarPermissionReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret -ExportToFile -OutputFormat CSV -Verbose
 
         Retrieves all calendar permissions, exports to CSV, and shows verbose progress.
-
-    .OUTPUTS
-        ITC.Reports.CalendarPermissions
-        Returns comprehensive calendar permissions analysis.
 
     .NOTES
         Author: Tom de Leeuw
@@ -117,17 +107,7 @@ function Get-TntExchangeCalendarPermissionReport {
     )
 
     begin {
-        # Multi-language calendar folder names
-        $CalendarFolderNames = @(
-            'Calendar',      # English
-            'Agenda',        # Dutch
-            'Calendrier',    # French
-            'Kalender',      # German
-            'Calendario',    # Spanish/Italian
-            [string]::Concat('Calend', [char]0x00E1, 'rio')     # Portuguese
-        )
-
-        Write-Information 'Starting calendar permissions analysis... (This may take several minutes for large tenants)' -InformationAction Continue
+        Write-Information 'STARTED  : Calendar permissions analysis... (This may take a while)' -InformationAction Continue
     }
 
     process {
@@ -209,44 +189,45 @@ function Get-TntExchangeCalendarPermissionReport {
 
             $AllCalendarPermissions = $TargetMailboxes | ForEach-Object -Parallel {
                 $UserCalendarPermissions = [System.Collections.Generic.List[PSObject]]::new()
+                $UPN = $_.UserPrincipalName
 
-                foreach ($FolderName in $using:CalendarFolderNames) {
-                    try {
-                        $FolderPath = "$($_.UserPrincipalName):\$($FolderName)"
-                        $FolderPerms = Get-EXOMailboxFolderPermission -Identity $FolderPath -ErrorAction Stop
+                try {
+                    # Discover the actual calendar folder name via folder statistics (locale-independent)
+                    $CalendarFolder = Get-EXOMailboxFolderStatistics -Identity $UPN -FolderScope Calendar -ErrorAction Stop |
+                        Where-Object { $_.FolderType -eq 'Calendar' } |
+                        Select-Object -First 1
 
-                        if ($FolderPerms) {
-                            # Filter out Default and Anonymous entries unless explicitly included
-                            if (-not $using:IncludeDefaultPermissions) {
-                                $FolderPerms = @($FolderPerms.Where({
-                                    $_.User.DisplayName -notin @('Default', 'Anonymous') -and
-                                    $_.User.DisplayName -ne $_.FolderName -and
-                                    $_.AccessRights -ne 'None'
-                                }))
-                            }
+                    if (-not $CalendarFolder) { return $UserCalendarPermissions }
 
-                            foreach ($Perm in $FolderPerms) {
-                                $UserCalendarPermissions.Add([PSCustomObject]@{
-                                        UserPrincipalName          = $_.UserPrincipalName
-                                        DisplayName                = $_.DisplayName
-                                        FolderName                 = $FolderName
-                                        FolderPath                 = $FolderPath
-                                        GrantedToUser              = $Perm.User.DisplayName
-                                        GrantedToUserPrincipalName = $Perm.User.UserPrincipalName
-                                        AccessRights               = $Perm.AccessRights -join ', '
-                                        SharingPermissionFlags     = $Perm.SharingPermissionFlags
-                                    })
-                            }
+                    $FolderName = $CalendarFolder.Name
+                    $FolderPath = "$($UPN):\$($FolderName)"
+                    $FolderPerms = Get-EXOMailboxFolderPermission -Identity $FolderPath -ErrorAction Stop
 
-                            # Break after finding the first valid calendar folder
-                            if ($FolderPerms.Count -gt 0) {
-                                break
-                            }
+                    if ($FolderPerms) {
+                        # Filter out Default and Anonymous entries unless explicitly included
+                        if (-not $using:IncludeDefaultPermissions) {
+                            $FolderPerms = @($FolderPerms.Where({
+                                $_.User.DisplayName -notin @('Default', 'Anonymous') -and
+                                $_.User.DisplayName -ne $_.FolderName -and
+                                $_.AccessRights -ne 'None'
+                            }))
                         }
-                    } catch {
-                        # Silent handling for each folder attempt
-                        continue
+
+                        foreach ($Perm in $FolderPerms) {
+                            $UserCalendarPermissions.Add([PSCustomObject]@{
+                                    UserPrincipalName          = $UPN
+                                    DisplayName                = $_.DisplayName
+                                    FolderName                 = $FolderName
+                                    FolderPath                 = $FolderPath
+                                    GrantedToUser              = $Perm.User.DisplayName
+                                    GrantedToUserPrincipalName = $Perm.User.UserPrincipalName
+                                    AccessRights               = $Perm.AccessRights -join ', '
+                                    SharingPermissionFlags     = $Perm.SharingPermissionFlags
+                                })
+                        }
                     }
+                } catch {
+                    # Skip mailboxes where calendar folder cannot be retrieved
                 }
 
                 return $UserCalendarPermissions
@@ -272,7 +253,7 @@ function Get-TntExchangeCalendarPermissionReport {
                 UsersWithSharedCalendars = ($CalendarPermissions | Select-Object -ExpandProperty Mailbox -Unique).Count
             }
 
-            Write-Information "Calendar permissions analysis completed - $($Summary.TotalPermissions) permissions found" -InformationAction Continue
+            Write-Information "FINISHED : Calendar permissions analysis - $($Summary.TotalPermissions) permissions found" -InformationAction Continue
             
             [PSCustomObject][Ordered]@{
                 Summary             = $Summary

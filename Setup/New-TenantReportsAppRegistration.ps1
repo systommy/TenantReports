@@ -312,28 +312,35 @@ process {
 
     #region App Registration
     $App = Get-MgApplication -Filter "displayName eq '$ApplicationName'" -ErrorAction SilentlyContinue
-    if ($App) {
-        Write-Host "[!] App '$ApplicationName' exists - updating permissions" -ForegroundColor Yellow
 
-        $RequiredAccess = foreach ($AppId in $Permissions.Keys) {
+    # Build requiredResourceAccess using camelCase keys for -BodyParameter serialization.
+    # The SDK's expanded parameter binding fails to convert nested hashtable collections
+    # into IMicrosoftGraphResourceAccess[], so we bypass it with -BodyParameter.
+    $RequiredAccess = @(
+        foreach ($AppId in $Permissions.Keys) {
             @{
-                ResourceAppId  = $AppId
-                ResourceAccess = $Permissions[$AppId].ForEach({ @{ Id = $_; Type = 'Role' } })
+                resourceAppId  = $AppId
+                resourceAccess = @(
+                    foreach ($PermId in $Permissions[$AppId]) {
+                        @{ id = $PermId; type = 'Role' }
+                    }
+                )
             }
         }
-        Update-MgApplication -ApplicationId $App.Id -RequiredResourceAccess $RequiredAccess
+    )
+
+    if ($App) {
+        Write-Host "[!] App '$ApplicationName' exists - updating permissions" -ForegroundColor Yellow
+        Update-MgApplication -ApplicationId $App.Id -BodyParameter @{ requiredResourceAccess = $RequiredAccess }
     }
     elseif ($PSCmdlet.ShouldProcess($ApplicationName, 'Create App Registration')) {
         Write-Host '[*] Creating app registration: ' -ForegroundColor Cyan -NoNewline
         Write-Host $ApplicationName -ForegroundColor White
-
-        $RequiredAccess = foreach ($AppId in $Permissions.Keys) {
-            @{
-                ResourceAppId  = $AppId
-                ResourceAccess = $Permissions[$AppId].ForEach({ @{ Id = $_; Type = 'Role' } })
-            }
+        $App = New-MgApplication -BodyParameter @{
+            displayName            = $ApplicationName
+            signInAudience         = 'AzureADMyOrg'
+            requiredResourceAccess = $RequiredAccess
         }
-        $App = New-MgApplication -DisplayName $ApplicationName -SignInAudience 'AzureADMyOrg' -RequiredResourceAccess $RequiredAccess
     }
     #endregion
 
@@ -463,7 +470,7 @@ process {
     #endregion
 
     #region Directory Roles
-     = @{
+    $RoleResults = @{
         Assigned = [System.Collections.Generic.List[string]]::new()
         Failed   = [System.Collections.Generic.List[string]]::new()
     }
@@ -475,7 +482,7 @@ process {
             try {
                 $Role = Get-MgDirectoryRole -Filter "displayName eq '$RoleName'" -ErrorAction SilentlyContinue
                 if (-not $Role) {
-                    $Template = Get-MgDirectoryRoleTemplate -Filter "displayName eq '$RoleName'"
+                    $Template = Get-MgDirectoryRoleTemplate -All | Where-Object { $_.DisplayName -eq $RoleName }
                     if (-not $Template) { throw "Directory Role Template '$RoleName' not found." }
                     $Role = New-MgDirectoryRole -RoleTemplateId $Template.Id
                     Start-Sleep -Seconds 5
@@ -550,5 +557,5 @@ process {
 }
 
 end {
-    Disconnect-MgGraph
+    $null = Disconnect-MgGraph
 }

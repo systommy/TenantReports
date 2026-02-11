@@ -88,7 +88,7 @@ function Get-TntConfigurationReport {
     )
 
     begin {
-        Write-Information 'Starting tenant configuration assessment (common misconfigurations)...' -InformationAction Continue
+        Write-Information 'STARTED  : Tenant (mis)configuration assessment...' -InformationAction Continue
     }
 
     process {
@@ -241,7 +241,7 @@ function Get-TntConfigurationReport {
                 InfoCount           = @($SettingsByRisk.Info).Count
             }
 
-            Write-Information 'Tenant configuration (common misconfigurations) assessment completed.' -InformationAction Continue
+            Write-Information 'FINISHED : Tenant (mis)configuration.' -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary            = $Summary

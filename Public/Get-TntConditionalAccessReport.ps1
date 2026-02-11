@@ -28,8 +28,6 @@ function Get-TntConditionalAccessReport {
     .EXAMPLE
         Get-TntConditionalAccessReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
 
-        Generates a comprehensive Conditional Access policy report.
-
     .EXAMPLE
         Get-TntConditionalAccessReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret |
             ConvertTo-Json -Depth 10 | Out-File -Path 'CA_Report.json'
@@ -98,7 +96,7 @@ function Get-TntConditionalAccessReport {
     )
 
     begin {
-        Write-Information 'Starting Conditional Access policy analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : Conditional Access policy analysis...' -InformationAction Continue
     }
 
     process {
@@ -417,7 +415,7 @@ function Get-TntConditionalAccessReport {
                 LegacyAuthBlockPolicies     = $AnalysisStats.LegacyAuthBlockPolicies
             }
 
-            Write-Information "Conditional Access policy analysis completed - $($PoliciesToAnalyze.Count) policies analyzed" -InformationAction Continue
+            Write-Information "FINISHED : Conditional Access policy analysis - $($PoliciesToAnalyze.Count) policies analyzed" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary          = $Summary

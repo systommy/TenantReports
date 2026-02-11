@@ -37,8 +37,6 @@ function Get-TntIntuneDeviceComplianceReport {
     .EXAMPLE
         Get-TntIntuneDeviceComplianceReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
 
-        Generates a comprehensive Intune device compliance report.
-
     .EXAMPLE
         Get-TntIntuneDeviceComplianceReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret -FilterByPlatform Windows -FilterByComplianceState NonCompliant
 
@@ -46,7 +44,7 @@ function Get-TntIntuneDeviceComplianceReport {
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
-        Returns a comprehensive report object containing:
+        Returns a report object containing:
         - Summary: Statistics on compliance, risk, and platforms
         - DeviceComplianceDetails: Detailed per-device analysis
         - ComplianceByRisk: Devices grouped by risk level
@@ -126,7 +124,7 @@ function Get-TntIntuneDeviceComplianceReport {
             'unknown'       = @{ Risk = 'Medium'; Description = 'Compliance state cannot be determined' }
         }
 
-        Write-Information 'Starting Intune device compliance analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : Intune device compliance analysis...' -InformationAction Continue
     }
 
     process {
@@ -163,7 +161,7 @@ function Get-TntIntuneDeviceComplianceReport {
             Write-Verbose "User cache ready: $($UserCache.UserCount) users (CacheHit: $($UserCache.CacheHit))"
 
             # Cache current time outside the loop to avoid repeated Get-Date calls
-            $Now = [datetime]::Now
+            $Now = [DateTime]::Now
 
             # Process each device for detailed compliance analysis
             $DeviceComplianceDetails = foreach ($Device in $ManagedDevices) {
@@ -401,7 +399,7 @@ function Get-TntIntuneDeviceComplianceReport {
                 MostCommonPlatform        = $MostCommonPlatform
             }
 
-            Write-Information "Intune device compliance analysis completed - $($TotalDevicesProcessed) devices analyzed ($($Summary.ComplianceRate)% compliant)" -InformationAction Continue
+            Write-Information "FINISHED : Intune device compliance analysis - $($TotalDevicesProcessed) devices analyzed ($($Summary.ComplianceRate)% compliant)" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                 = $Summary

@@ -98,7 +98,7 @@ function Get-TntLicenseChangeAuditReport {
             Write-Verbose 'SKU Translation Table not available.'
         }
 
-        Write-Information 'Starting license change audit analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : License change audit analysis...' -InformationAction Continue
     }
 
     process {
@@ -219,7 +219,7 @@ function Get-TntLicenseChangeAuditReport {
                 MostChangedUsers    = $MostChangedUsers
             }
 
-            Write-Information "License change audit completed - $($Changes.Count) changes found." -InformationAction Continue
+            Write-Information "FINISHED : License change audit - $($Changes.Count) changes found." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary = $Summary

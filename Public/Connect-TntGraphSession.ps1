@@ -219,7 +219,7 @@ function Connect-TntGraphSession {
                 )
 
                 # Use browser-based interactive auth (opens default browser for sign-in)
-                Write-Host 'Starting interactive authentication - a browser window will open for sign-in...' -ForegroundColor Cyan
+                Write-Host 'STARTED  : interactive authentication - a browser window will open for sign-in...' -ForegroundColor Cyan
                 Connect-MgGraph -Scopes $DelegatedScopes -NoWelcome -ErrorAction Stop
 
                 $NewContext = Get-MgContext -ErrorAction Stop

@@ -48,8 +48,8 @@ function Disconnect-TntGraphSession {
                     try {
                         $CurrentContext = Get-MgContext -ErrorAction SilentlyContinue
                         if ($CurrentContext) {
-                            Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
-                            Write-Information "Disconnected from Microsoft Graph (Tenant: $($ConnectionState.TenantId))" -InformationAction Continue
+                            Disconnect-MgGraph -ErrorAction Stop | Out-Null
+                            Write-Verbose "Disconnected from Microsoft Graph (Tenant: $($ConnectionState.TenantId))"
                         } else {
                             Write-Verbose 'No active Microsoft Graph connection found to disconnect'
                         }

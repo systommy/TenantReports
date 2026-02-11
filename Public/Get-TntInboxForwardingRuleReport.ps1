@@ -74,7 +74,7 @@ function Get-TntInboxForwardingRuleReport {
     )
 
     begin {
-        Write-Information 'Starting inbox forwarding rule analysis... (this may take a while)' -InformationAction Continue
+        Write-Information 'STARTED  : Inbox forwarding rule analysis... (This may take a while)' -InformationAction Continue
     }
 
     process {
@@ -202,7 +202,7 @@ function Get-TntInboxForwardingRuleReport {
 
             $Summary = [PSCustomObject]@{
                 TenantId                = $TenantId
-                ReportGeneratedDate     = [datetime]::Now
+                ReportGeneratedDate     = [DateTime]::Now
                 TotalMailboxesChecked   = $Mailboxes.Count
                 TotalRulesChecked       = $TotalRulesChecked
                 ExternalForwardsFound   = $ForwardingRules.Count
@@ -211,7 +211,7 @@ function Get-TntInboxForwardingRuleReport {
                 ExternalDomains         = $UniqueExternalDomains
             }
 
-            Write-Information "Inbox forwarding analysis completed - checked $($Mailboxes.Count) mailboxes and $($TotalRulesChecked) rules, found $($ForwardingRules.Count) external forwarding rules." -InformationAction Continue
+            Write-Information "FINISHED : Inbox forwarding rule analysis - checked $($Mailboxes.Count) mailboxes and $($TotalRulesChecked) rules, found $($ForwardingRules.Count) external forwarding rules." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary         = $Summary

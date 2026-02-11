@@ -111,7 +111,7 @@ function Get-TntM365RiskyUserReport {
     begin {
         # Calculate start date
         $StartDate = [datetime]::UtcNow.AddDays(-$DaysBack).ToString('yyyy-MM-ddTHH:mm:ssZ')
-        Write-Information "Starting risky users report generation for past $($DaysBack) days..." -InformationAction Continue
+        Write-Information "STARTED  : Risky users report generation for past $($DaysBack) days..." -InformationAction Continue
     }
 
     process {
@@ -237,7 +237,7 @@ function Get-TntM365RiskyUserReport {
                 TotalRiskyServicePrincipals    = if ($RiskyServicePrincipalReport) { $RiskyServicePrincipalReport.Count } else { 0 }
             }
 
-            Write-Information "Risky users report completed - $($Summary.TotalRiskyUsers) risky users found" -InformationAction Continue
+            Write-Information "FINISHED : Risky users report - $($Summary.TotalRiskyUsers) risky users found" -InformationAction Continue
 
             [PSCustomObject]@{
                 ReportDate             = Get-Date

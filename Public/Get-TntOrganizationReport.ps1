@@ -31,7 +31,7 @@ function Get-TntOrganizationReport {
     .EXAMPLE
         Get-TntOrganizationReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret -IncludeDirectoryStats
 
-        Retrieves comprehensive tenant information including directory statistics.
+        Retrieves tenant information including directory statistics.
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
@@ -88,7 +88,7 @@ function Get-TntOrganizationReport {
     )
 
     begin {
-        Write-Information 'Starting tenant information retrieval...' -InformationAction Continue
+        Write-Information 'STARTED  : Tenant information retrieval...' -InformationAction Continue
     }
 
     process {
@@ -201,7 +201,7 @@ function Get-TntOrganizationReport {
                 ReportGeneratedBy          = $ClientId
             }
 
-            Write-Information "Tenant information retrieval completed - $($Organization.DisplayName)" -InformationAction Continue
+            Write-Information "FINISHED : Tenant information retrieval - $($Organization.DisplayName)" -InformationAction Continue
 
             [PSCustomObject][Ordered] @{
                 Summary             = $TenantInfo

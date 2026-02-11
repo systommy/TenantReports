@@ -76,7 +76,7 @@ function Get-TntSharedMailboxComplianceReport {
     )
 
     begin {
-        Write-Information 'Starting shared mailbox compliance analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : Shared mailbox compliance analysis...' -InformationAction Continue
     }
 
     process {
@@ -148,66 +148,152 @@ function Get-TntSharedMailboxComplianceReport {
 
             Write-Verbose "Found $($SharedMailboxes.Count) shared mailboxes. Checking compliance..."
 
+            # Separate mailboxes without an ExternalDirectoryObjectId (cannot query Graph)
+            $MailboxesWithId = [System.Collections.Generic.List[object]]::new()
             foreach ($Mbx in $SharedMailboxes) {
-                $UserId = $Mbx.ExternalDirectoryObjectId
-                if (-not $UserId) {
+                if (-not $Mbx.ExternalDirectoryObjectId) {
                     $Mailboxes.Add([PSCustomObject]@{
-                            DisplayName       = $Mbx.DisplayName
-                            UserPrincipalName = $Mbx.UserPrincipalName
-                            AccountEnabled    = 'Unknown'
+                            DisplayName        = $Mbx.DisplayName
+                            UserPrincipalName  = $Mbx.UserPrincipalName
+                            AccountEnabled     = 'Unknown'
                             HasExchangeLicense = $false
-                            ComplianceStatus  = 'Unknown'
-                            LicensePlans      = @()
+                            ComplianceStatus   = 'Unknown'
+                            LicensePlans       = @()
                         })
-                    continue
-                }
-
-                # Get user account status
-                try {
-                    $User = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$UserId`?`$select=accountEnabled" -Method GET -ErrorAction Stop
-                    $AccountEnabled = $User.accountEnabled
-                } catch {
-                    Write-Warning "Could not retrieve user info for $($Mbx.UserPrincipalName): $($_.Exception.Message)"
-                    $AccountEnabled = $null
-                }
-
-                # Get license details
-                $HasExchangeLicense = $false
-                [System.Collections.Generic.List[string]]$AssignedPlans = @()
-                try {
-                    $LicenseDetails = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$UserId/licenseDetails" -Method GET -ErrorAction Stop
-                    foreach ($License in $LicenseDetails.value) {
-                        $ExchangeServicePlans = @($License.servicePlans).Where({
-                            $_.servicePlanName -in $ExchangePlans -and $_.provisioningStatus -eq 'Success'
-                        })
-                        if ($ExchangeServicePlans.Count -gt 0) {
-                            $HasExchangeLicense = $true
-                            foreach ($Plan in $ExchangeServicePlans) { $AssignedPlans.Add($Plan.servicePlanName) }
-                        }
-                    }
-                } catch {
-                    Write-Warning "Could not retrieve license details for $($Mbx.UserPrincipalName): $($_.Exception.Message)"
-                }
-
-                # Determine compliance
-                $ComplianceStatus = if ($null -eq $AccountEnabled) {
-                    'Unknown'
-                } elseif (-not $AccountEnabled) {
-                    'Compliant'  # Disabled account - no license needed
-                } elseif ($HasExchangeLicense) {
-                    'Compliant'  # Enabled with license
                 } else {
-                    'NonCompliant'  # Enabled without Exchange license
+                    $MailboxesWithId.Add($Mbx)
+                }
+            }
+
+            # Process mailboxes with IDs in batches of 10 (20 requests per batch: user + licenseDetails)
+            $BatchSize = 10
+            for ($i = 0; $i -lt $MailboxesWithId.Count; $i += $BatchSize) {
+                $End = [Math]::Min($i + $BatchSize, $MailboxesWithId.Count)
+                $Chunk = $MailboxesWithId.GetRange($i, $End - $i)
+
+                # Build batch request body
+                $Requests = [System.Collections.Generic.List[hashtable]]::new()
+                foreach ($Mbx in $Chunk) {
+                    $Guid = $Mbx.ExternalDirectoryObjectId
+                    $Requests.Add(@{ id = "user-$Guid";    method = 'GET'; url = "/users/$Guid`?`$select=accountEnabled" })
+                    $Requests.Add(@{ id = "license-$Guid"; method = 'GET'; url = "/users/$Guid/licenseDetails" })
                 }
 
-                $Mailboxes.Add([PSCustomObject]@{
-                        DisplayName        = $Mbx.DisplayName
-                        UserPrincipalName  = $Mbx.UserPrincipalName
-                        AccountEnabled     = $AccountEnabled
-                        HasExchangeLicense = $HasExchangeLicense
-                        ComplianceStatus   = $ComplianceStatus
-                        LicensePlans       = $AssignedPlans
-                    })
+                $BatchBody = @{ requests = $Requests.ToArray() }
+                $BatchSuccess = $false
+
+                try {
+                    $BatchResponse = Invoke-MgGraphRequest -Uri 'https://graph.microsoft.com/v1.0/$batch' -Method POST -Body $BatchBody -ErrorAction Stop
+                    $BatchSuccess = $true
+                } catch {
+                    Write-Warning "Batch request failed, falling back to individual calls for $($Chunk.Count) mailboxes: $($_.Exception.Message)"
+                }
+
+                if ($BatchSuccess) {
+                    # Index batch responses by id for fast lookup
+                    $ResponseMap = @{}
+                    foreach ($Resp in $BatchResponse.responses) { $ResponseMap[$Resp.id] = $Resp }
+
+                    foreach ($Mbx in $Chunk) {
+                        $Guid = $Mbx.ExternalDirectoryObjectId
+                        $AccountEnabled = $null
+                        $HasExchangeLicense = $false
+                        [System.Collections.Generic.List[string]]$AssignedPlans = @()
+
+                        # Parse user response
+                        $UserResp = $ResponseMap["user-$Guid"]
+                        if ($UserResp -and $UserResp.status -eq 200) {
+                            $AccountEnabled = $UserResp.body.accountEnabled
+                        } else {
+                            Write-Warning "Could not retrieve user info for $($Mbx.UserPrincipalName): HTTP $($UserResp.status)"
+                        }
+
+                        # Parse license response
+                        $LicenseResp = $ResponseMap["license-$Guid"]
+                        if ($LicenseResp -and $LicenseResp.status -eq 200) {
+                            foreach ($License in $LicenseResp.body.value) {
+                                $ExchangeServicePlans = @($License.servicePlans).Where({
+                                    $_.servicePlanName -in $ExchangePlans -and $_.provisioningStatus -eq 'Success'
+                                })
+                                if ($ExchangeServicePlans.Count -gt 0) {
+                                    $HasExchangeLicense = $true
+                                    foreach ($Plan in $ExchangeServicePlans) { $AssignedPlans.Add($Plan.servicePlanName) }
+                                }
+                            }
+                        } else {
+                            Write-Warning "Could not retrieve license details for $($Mbx.UserPrincipalName): HTTP $($LicenseResp.status)"
+                        }
+
+                        # Determine compliance
+                        $ComplianceStatus = if ($null -eq $AccountEnabled) {
+                            'Unknown'
+                        } elseif (-not $AccountEnabled) {
+                            'Compliant'  # Disabled account - no license needed
+                        } elseif ($HasExchangeLicense) {
+                            'Compliant'  # Enabled with license
+                        } else {
+                            'NonCompliant'  # Enabled without Exchange license
+                        }
+
+                        $Mailboxes.Add([PSCustomObject]@{
+                                DisplayName        = $Mbx.DisplayName
+                                UserPrincipalName  = $Mbx.UserPrincipalName
+                                AccountEnabled     = $AccountEnabled
+                                HasExchangeLicense = $HasExchangeLicense
+                                ComplianceStatus   = $ComplianceStatus
+                                LicensePlans       = $AssignedPlans
+                            })
+                    }
+                } else {
+                    # Fallback: individual calls for this batch
+                    foreach ($Mbx in $Chunk) {
+                        $UserId = $Mbx.ExternalDirectoryObjectId
+                        $AccountEnabled = $null
+                        $HasExchangeLicense = $false
+                        [System.Collections.Generic.List[string]]$AssignedPlans = @()
+
+                        try {
+                            $User = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$UserId`?`$select=accountEnabled" -Method GET -ErrorAction Stop
+                            $AccountEnabled = $User.accountEnabled
+                        } catch {
+                            Write-Warning "Could not retrieve user info for $($Mbx.UserPrincipalName): $($_.Exception.Message)"
+                        }
+
+                        try {
+                            $LicenseDetails = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$UserId/licenseDetails" -Method GET -ErrorAction Stop
+                            foreach ($License in $LicenseDetails.value) {
+                                $ExchangeServicePlans = @($License.servicePlans).Where({
+                                    $_.servicePlanName -in $ExchangePlans -and $_.provisioningStatus -eq 'Success'
+                                })
+                                if ($ExchangeServicePlans.Count -gt 0) {
+                                    $HasExchangeLicense = $true
+                                    foreach ($Plan in $ExchangeServicePlans) { $AssignedPlans.Add($Plan.servicePlanName) }
+                                }
+                            }
+                        } catch {
+                            Write-Warning "Could not retrieve license details for $($Mbx.UserPrincipalName): $($_.Exception.Message)"
+                        }
+
+                        $ComplianceStatus = if ($null -eq $AccountEnabled) {
+                            'Unknown'
+                        } elseif (-not $AccountEnabled) {
+                            'Compliant'
+                        } elseif ($HasExchangeLicense) {
+                            'Compliant'
+                        } else {
+                            'NonCompliant'
+                        }
+
+                        $Mailboxes.Add([PSCustomObject]@{
+                                DisplayName        = $Mbx.DisplayName
+                                UserPrincipalName  = $Mbx.UserPrincipalName
+                                AccountEnabled     = $AccountEnabled
+                                HasExchangeLicense = $HasExchangeLicense
+                                ComplianceStatus   = $ComplianceStatus
+                                LicensePlans       = $AssignedPlans
+                            })
+                    }
+                }
             }
 
             $Compliant = @($Mailboxes.Where({ $_.ComplianceStatus -eq 'Compliant' }))
@@ -223,7 +309,7 @@ function Get-TntSharedMailboxComplianceReport {
                 UnknownCount          = $Unknown.Count
             }
 
-            Write-Information "Shared mailbox compliance analysis completed - $($NonCompliant.Count) noncompliant of $($Mailboxes.Count) total." -InformationAction Continue
+            Write-Information "FINISHED : Shared mailbox compliance analysis - $($NonCompliant.Count) noncompliant of $($Mailboxes.Count) total." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary   = $Summary

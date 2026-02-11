@@ -35,8 +35,6 @@ function Get-TntM365SecureScoreReport {
     .EXAMPLE
         Get-TntM365SecureScoreReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
 
-        Generates a comprehensive secure score report.
-
     .EXAMPLE
         Get-TntM365SecureScoreReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret |
             ConvertTo-Json -Depth 10 | Out-File -Path 'SecureScore.json'
@@ -117,7 +115,7 @@ function Get-TntM365SecureScoreReport {
     )
 
     begin {
-        Write-Information 'Starting Secure Score report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : Secure Score report generation...' -InformationAction Continue
     }
 
     process {
@@ -214,7 +212,7 @@ function Get-TntM365SecureScoreReport {
             if ($IncludeHistoricalData) {
                 Write-Verbose "Retrieving historical secure score data (last $MaxHistoryDays days)..."
                 try {
-                    $HistoryStartDate = [datetime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+                    $HistoryStartDate = [DateTime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 
                     # Try multiple methods for historical data
                     try {
@@ -493,7 +491,7 @@ function Get-TntM365SecureScoreReport {
                 LastUpdated                 = $LatestScore.CreatedDateTime
             }
 
-            Write-Information "Secure Score report completed - Score: $($CurrentScoreValue)/$($MaxScoreValue) ($($CurrentScorePercentage)%)" -InformationAction Continue
+            Write-Information "FINISHED : Secure Score report - Score: $($CurrentScoreValue)/$($MaxScoreValue) ($($CurrentScorePercentage)%)" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                 = $Summary

@@ -44,7 +44,7 @@ function Get-TntServicePrincipalPermissionReport {
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
-        Returns a comprehensive report object containing:
+        Returns a report object containing:
         - Summary: Statistics on permission grants and risks
         - CriticalRiskPermissions: Details of critical permissions granted
         - HighRiskPermissions: Details of high-risk permissions granted
@@ -154,7 +154,7 @@ function Get-TntServicePrincipalPermissionReport {
             '00000001-0000-0000-c000-000000000000' = 'Microsoft Graph (Classic)'
         }
 
-        Write-Information 'Starting Service Principal permissions report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : Service Principal permissions report generation...' -InformationAction Continue
     }
 
     process {
@@ -207,7 +207,7 @@ function Get-TntServicePrincipalPermissionReport {
                 Write-Verbose "User cache ready: $($UserCache.UserCount) users (CacheHit: $($UserCache.CacheHit))"
             }
 
-            $Now = [datetime]::Now
+            $Now = [DateTime]::Now
 
             # Process each OAuth2 grant
             foreach ($Grant in $AllOAuth2Grants) {
@@ -326,7 +326,7 @@ function Get-TntServicePrincipalPermissionReport {
             # Filter inactive apps if excluded
             if ($ExcludeInactiveApps) {
                 Write-Verbose 'Filtering out inactive applications...'
-                $InactiveThreshold = [datetime]::Now.AddDays(-90)
+                $InactiveThreshold = [DateTime]::Now.AddDays(-90)
                 $DelegatedPermissionGrants = @($DelegatedPermissionGrants.Where({
                             -not $_.ClientCreatedDate -or $_.ClientCreatedDate -gt $InactiveThreshold
                         }))
@@ -396,7 +396,7 @@ function Get-TntServicePrincipalPermissionReport {
                 TenantId                = $TenantId
             }
 
-            Write-Information "Service Principal permissions report completed - $($Summary.TotalPermissionGrants) permission grants analyzed" -InformationAction Continue
+            Write-Information "FINISHED : Service Principal permissions report - $($Summary.TotalPermissionGrants) permission grants analyzed" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                 = $Summary

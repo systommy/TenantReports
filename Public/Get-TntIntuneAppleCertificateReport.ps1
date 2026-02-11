@@ -35,7 +35,7 @@ function Get-TntIntuneAppleCertificateReport {
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
-        Returns a comprehensive report object containing:
+        Returns a report object containing:
         - Summary: Counts of items by status and type
         - AllItems: Detailed list of all certificates and tokens with status and risk level
 
@@ -108,7 +108,7 @@ function Get-TntIntuneAppleCertificateReport {
             }
         }
 
-        Write-Information 'Starting Apple certificate and token expiration monitoring...' -InformationAction Continue
+        Write-Information 'STARTED  : Apple certificate and token expirations...' -InformationAction Continue
     }
 
     process {
@@ -120,7 +120,7 @@ function Get-TntIntuneAppleCertificateReport {
             # Initialize collections for certificate/token data
             $AllItems = [System.Collections.Generic.List[PSObject]]::new()
             $Errors   = [System.Collections.Generic.List[PSObject]]::new()
-            $Now      = [datetime]::Now
+            $Now      = [DateTime]::Now
 
             # Get APNS Certificate
             Write-Verbose 'Retrieving Apple Push Notification Certificate...'
@@ -292,7 +292,7 @@ function Get-TntIntuneAppleCertificateReport {
                 VPPTokens           = $AllItems.Where({ $_.Type -eq 'VPP' }).Count
             }
 
-            Write-Information "Apple certificate monitoring completed - $($AllItems.Count) items checked ($ExpiringCount expiring soon)" -InformationAction Continue
+            Write-Information "FINISHED : Apple certificate expirations - $($AllItems.Count) items checked ($ExpiringCount expiring soon)" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary  = $Summary

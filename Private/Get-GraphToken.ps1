@@ -155,7 +155,7 @@ function Get-GraphToken {
             # Refresh tokens 5 minutes before expiration to prevent mid-operation failures
             if ($script:TokenCache.ContainsKey($CacheKey)) {
                 $CachedToken = $script:TokenCache[$CacheKey]
-                if ($CachedToken.ExpiresAt -gt [datetime]::Now.AddMinutes(5)) {
+                if ($CachedToken.ExpiresAt -gt [DateTime]::Now.AddMinutes(5)) {
                     Write-Verbose "Using cached token (expires: $($CachedToken.ExpiresAt))"
                     return $CachedToken
                 }
@@ -187,13 +187,13 @@ function Get-GraphToken {
                     SecureAccessToken = $null
                     TokenType         = 'Interactive'
                     ExpiresIn         = 3600
-                    ExpiresAt         = [datetime]::Now.AddHours(1)
+                    ExpiresAt         = [DateTime]::Now.AddHours(1)
                     Scope             = $ScopeUri
                     ServiceType       = $Scope
                     TenantId          = $MgContext.TenantId
                     ClientId          = $MgContext.ClientId
                     IsExpired         = $false
-                    CreatedAt         = [datetime]::Now
+                    CreatedAt         = [DateTime]::Now
                     IsInteractive     = $true
                     GetSecureHeader   = $null
                 } | Add-Member -MemberType ScriptMethod -Name 'IsTokenExpired' -Value {
@@ -452,24 +452,24 @@ function Get-GraphToken {
                 }
             }
 
-            Write-Verbose "Successfully retrieved access token. Expiration date: $([datetime]::Now.AddSeconds($TokenRequest.expires_in))"
+            Write-Verbose "Successfully retrieved access token. Expiration date: $([DateTime]::Now.AddSeconds($TokenRequest.expires_in))"
 
             # Return secure token information
             $TokenInfo = [PSCustomObject]@{
                 SecureAccessToken = $SecureAccessToken
                 TokenType         = $TokenRequest.token_type
                 ExpiresIn         = $TokenRequest.expires_in
-                ExpiresAt         = [datetime]::Now.AddSeconds($TokenRequest.expires_in)
+                ExpiresAt         = [DateTime]::Now.AddSeconds($TokenRequest.expires_in)
                 Scope             = $ScopeUri
                 ServiceType       = $Scope
                 TenantId          = $TenantId
                 ClientId          = $ClientId
                 IsExpired         = $false
-                CreatedAt         = [datetime]::Now
+                CreatedAt         = [DateTime]::Now
                 GetSecureHeader   = $script:GetSecureAuthHeader
             } | Add-Member -MemberType ScriptMethod -Name 'IsTokenExpired' -Value {
                 # Method to check if token is expired
-                return [datetime]::Now -gt $this.ExpiresAt
+                return [DateTime]::Now -gt $this.ExpiresAt
             } -PassThru | Add-Member -MemberType ScriptMethod -Name 'ClearToken' -Value {
                 # Method to securely clear the token
                 $this.SecureAccessToken = $null

@@ -232,6 +232,23 @@ function Invoke-TntReport {
         $script:OrchestratorConnection = Connect-TntGraphSession @ConnectionParams
         $script:ConnectionEstablishedByOrchestrator = $true
 
+        # Validate connection before proceeding
+        if (-not $script:OrchestratorConnection.Connected) {
+            $ErrorMessage = if ($script:OrchestratorConnection.ErrorMessage) {
+                "Failed to establish connection: $($script:OrchestratorConnection.ErrorMessage)"
+            } else {
+                'Failed to establish connection to Microsoft Graph. Please verify your credentials and try again.'
+            }
+
+            $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+                [System.Exception]::new($ErrorMessage),
+                'InvokeTntReportConnectionError',
+                [System.Management.Automation.ErrorCategory]::ConnectionError,
+                $TenantId
+            )
+            $PSCmdlet.ThrowTerminatingError($errorRecord)
+        }
+
         # For interactive auth, get TenantId from the established connection and add to ReportParams
         if ($Interactive -and $script:OrchestratorConnection.TenantId) {
             $TenantId = $script:OrchestratorConnection.TenantId
@@ -245,7 +262,7 @@ function Invoke-TntReport {
     }
 
     process {
-        Write-Information 'Starting security report generation...' -InformationAction Continue
+        Write-Information 'Starting full tenant report generation...' -InformationAction Continue
         $ReportStartTime = Get-Date
 
         # Initialize section status tracking and error collection
@@ -406,7 +423,7 @@ function Invoke-TntReport {
         function Test-TokenRefreshNeeded {
             param([PSCustomObject]$TokenInfo)
             if ($null -eq $TokenInfo -or $null -eq $TokenInfo.ExpiresAt) { return $true }
-            return ($TokenInfo.ExpiresAt - [datetime]::Now).TotalMinutes -lt 10
+            return ($TokenInfo.ExpiresAt - [DateTime]::Now).TotalMinutes -lt 10
         }
 
         # Execute selected sections with progress tracking
@@ -454,22 +471,22 @@ function Invoke-TntReport {
         # Surface section failures
         $Failed = @($SectionStatus.GetEnumerator().Where({ $_.Value -eq 'Failed' }))
         if ($Failed) {
-            Write-Warning "Failed sections: $(($Failed.Key) -join ', ')"
-            Write-Warning "See `$report.ReportMetadata.Errors for details"
+            Write-Warning "Failed sections: $(($Failed.Key) -join ', '). Check `$report.ReportMetadata.Errors for details"
         }
 
         # Build final report object
         $FullReport = [PSCustomObject]$ReportData
-        Write-Verbose "Report assembly complete with $($SectionStatus.Count) sections"
 
+        Write-Verbose "Report assembly complete with $($SectionStatus.Count) sections"
         Write-Progress -Activity 'Generating Report' -Completed
+        Write-Information "TenantReport generation completed in: $($Duration.Minutes)m $($Duration.Seconds)s" -InformationAction Continue
 
         # Write to local file if output path specified
         if ($OutputPath) {
             try {
                 $JsonPath = Join-Path -Path $OutputPath -ChildPath $OutputFileName
                 $FullReport | ConvertTo-Json -Depth 40 -Compress | Out-File -FilePath $JsonPath -Encoding UTF8
-                Write-Information "JSON report saved to: $JsonPath" -InformationAction Continue
+                Write-Information "    JSON report saved to: $JsonPath" -InformationAction Continue
 
                 # Update metadata with file path
                 $FullReport.ReportMetadata | Add-Member -NotePropertyName 'OutputPath' -NotePropertyValue $JsonPath -Force
@@ -479,8 +496,6 @@ function Invoke-TntReport {
             }
         }
 
-        Write-Information "Security report generation completed in $($Duration.Minutes)m $($Duration.Seconds)s" -InformationAction Continue
-
         $FullReport
     }
 
@@ -488,8 +503,6 @@ function Invoke-TntReport {
         # Reset orchestrator flag and disconnect
         $script:ConnectionEstablishedByOrchestrator = $false
         $script:OrchestratorConnection.ShouldDisconnect = $true
-        if ($script:OrchestratorConnection.ShouldDisconnect) {
-            Disconnect-TntGraphSession -ConnectionState $script:OrchestratorConnection
-        }
+        Disconnect-TntGraphSession -ConnectionState $script:OrchestratorConnection
     }
 }

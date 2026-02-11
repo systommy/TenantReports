@@ -106,10 +106,10 @@ function Get-TntPrivilegedRoleReport {
 
     begin {
         # Calculate date range for analysis
-        $StartDate       = [datetime]::Now.AddDays(-$LookbackDays)
+        $StartDate       = [DateTime]::Now.AddDays(-$LookbackDays)
         $StartDateString = $StartDate.ToString('yyyy-MM-ddTHH:mm:ssZ')
 
-        Write-Information 'Starting privileged role report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : Privileged role report generation...' -InformationAction Continue
     }
 
     process {
@@ -246,7 +246,7 @@ function Get-TntPrivilegedRoleReport {
             # Pre-fetch emergency account users (incremental mode - only specific users needed)
             $EmergencyPrincipalIds = @($PotentialEmergencyAccounts | Select-Object -ExpandProperty PrincipalId -Unique)
             $UserCache             = $null
-            $Now                   = [datetime]::Now
+            $Now                   = [DateTime]::Now
             if ($EmergencyPrincipalIds.Count -gt 0) {
                 Write-Verbose "Pre-fetching $($EmergencyPrincipalIds.Count) emergency account users (incremental mode)..."
                 $CacheParams = @{
@@ -317,7 +317,7 @@ function Get-TntPrivilegedRoleReport {
                 CustomRoles               = ($PermanentAssignments.Where({ $_.RoleType -eq 'Custom' }) | Select-Object RoleId -Unique).Count
             }
 
-            Write-Information "Privileged role report completed - $($PermanentAssignments.Count) permanent assignments found" -InformationAction Continue
+            Write-Information "FINISHED : Privileged role report - $($PermanentAssignments.Count) permanent assignments found" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                 = $Summary

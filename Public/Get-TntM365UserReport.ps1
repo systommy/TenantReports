@@ -35,8 +35,6 @@ function Get-TntM365UserReport {
     .EXAMPLE
         Get-TntM365UserReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
 
-        Generates a comprehensive user security report.
-
     .EXAMPLE
         Get-TntM365UserReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret |
             ConvertTo-Json -Depth 10 | Out-File -Path 'UserReport.json'
@@ -144,7 +142,7 @@ function Get-TntM365UserReport {
             [pscustomobject]@{type = 'securityQuestion'; AltName = 'Security Questions'; Name = 'Security Questions'; Strength = 'Weak' }
         )
 
-        Write-Information 'Starting user security report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : User report generation...' -InformationAction Continue
     }
 
     process {
@@ -209,7 +207,7 @@ function Get-TntM365UserReport {
             $UserSecurityReport = [System.Collections.Generic.List[PSObject]]::new()
 
             # Cache current time outside the loop to avoid repeated Get-Date calls
-            $Now = [datetime]::Now
+            $Now = [DateTime]::Now
 
             foreach ($User in $FilteredUsers) {
                 try {
@@ -449,7 +447,7 @@ function Get-TntM365UserReport {
                 } else { 0 }
             }
 
-            Write-Information "User security report completed - $($UserSecurityReport.Count) users processed" -InformationAction Continue
+            Write-Information "FINISHED : User report - $($UserSecurityReport.Count) users processed" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary           = $Summary

@@ -25,7 +25,7 @@ function Get-TntPIMReport {
     .EXAMPLE
         Get-TntPIMReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret
 
-        Generates a comprehensive PIM report for eligible and active role assignments.
+        Generates a PIM report for eligible and active role assignments.
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
@@ -84,7 +84,7 @@ function Get-TntPIMReport {
     )
 
     begin {
-        Write-Information 'Starting PIM report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : PIM report generation...' -InformationAction Continue
     }
 
     process {
@@ -192,7 +192,7 @@ function Get-TntPIMReport {
                 ActiveGlobalAdministrators   = $PIMActiveAssignments.Where({ $_.RoleName -eq 'Global Administrator' }).Count
             }
 
-            Write-Information "PIM report completed - $($TotalPIMAssignments) total assignments ($($PIMEligibleAssignments.Count) eligible, $($PIMActiveAssignments.Count) active)" -InformationAction Continue
+            Write-Information "FINISHED : PIM report - $($TotalPIMAssignments) total assignments ($($PIMEligibleAssignments.Count) eligible, $($PIMActiveAssignments.Count) active)" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary                = $Summary

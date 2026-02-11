@@ -87,7 +87,7 @@ function Get-TntLicenseReport {
             Write-Verbose "SKU Translation Table not available."
         }
 
-        Write-Information 'Starting license information retrieval...' -InformationAction Continue
+        Write-Information 'STARTED  : License report retrieval...' -InformationAction Continue
     }
 
     process {
@@ -142,7 +142,7 @@ function Get-TntLicenseReport {
                 TotalLicensesAvailable = $TotalAvailable
             }
 
-            Write-Information "License report completed - $($Summary.TotalSubscriptions) subscriptions found" -InformationAction Continue
+            Write-Information "FINISHED : License report - $($Summary.TotalSubscriptions) licenses found" -InformationAction Continue
 
             [PSCustomObject] @{
                 Summary  = $Summary

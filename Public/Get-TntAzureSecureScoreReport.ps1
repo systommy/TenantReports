@@ -47,13 +47,9 @@ function Get-TntAzureSecureScoreReport {
         Get-TntAzureSecureScoreReport -TenantId $tenantId -ClientId $clientId -ClientSecret $secret |
             ConvertTo-Json -Depth 10 | Out-File -Path 'AzureSecureScore.json'
 
-        Exports the report to JSON format.
-
     .EXAMPLE
         $Report = Get-TntAzureSecureScoreReport @params -IncludeRecommendations -IncludeHistoricalData
         $Report.SubscriptionScores | Sort-Object ScorePercentage | Format-Table
-
-        Retrieves comprehensive data and displays subscription scores.
 
     .OUTPUTS
         System.Management.Automation.PSCustomObject
@@ -135,7 +131,7 @@ function Get-TntAzureSecureScoreReport {
         # Azure Resource Manager endpoint
         $Script:ArmBaseUri = 'https://management.azure.com'
 
-        Write-Information 'Starting Azure Secure Score collection across subscriptions...' -InformationAction Continue
+        Write-Information 'STARTED  : Azure Secure Score collection...' -InformationAction Continue
     }
 
     process {
@@ -411,7 +407,7 @@ function Get-TntAzureSecureScoreReport {
                 Write-Verbose "Retrieving historical secure score data (last $MaxHistoryDays days) for subscriptions..."
 
                 # Cache date calculation outside the loop
-                $StartDate = [datetime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+                $StartDate = [DateTime]::Now.AddDays(-$MaxHistoryDays).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 
                 foreach ($Subscription in $AllSubscriptions.Where({ $_.subscriptionId -in $ValidScores.SubscriptionId })) {
                     try {
@@ -517,7 +513,7 @@ function Get-TntAzureSecureScoreReport {
                 Write-Verbose "Historical data processing completed. Found $($HistoricalScores.Count) historical entries"
             }
 
-            Write-Information "Azure Secure Score collection completed - $($ValidScores.Count) subscriptions processed" -InformationAction Continue
+            Write-Information "FINISHED : Azure Secure Score collection - $($ValidScores.Count) subscriptions processed" -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary            = $AggregatedStats

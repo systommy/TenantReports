@@ -124,7 +124,7 @@ function Get-TntM365AuditEvent {
     )
 
     begin {
-        Write-Information 'Starting audit event retrieval...' -InformationAction Continue
+        Write-Information "STARTED  : $AuditMode Audit event retrieval..." -InformationAction Continue
     }
 
     process {
@@ -285,7 +285,7 @@ function Get-TntM365AuditEvent {
                 }
             }
 
-            Write-Information "Audit event retrieval completed - $($Results.Count) matching events found" -InformationAction Continue
+            Write-Information "FINISHED : $AuditMode Audit event retrieval - $($Results.Count) matching events found" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary = [PSCustomObject]@{

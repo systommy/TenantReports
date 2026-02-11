@@ -100,7 +100,7 @@ function Get-TntDefenderIncidentReport {
     )
 
     begin {
-        Write-Information 'Starting Microsoft Defender Incidents report generation...' -InformationAction Continue
+        Write-Information 'STARTED  : Microsoft Defender Incidents report generation...' -InformationAction Continue
     }
 
     process {
@@ -168,7 +168,7 @@ function Get-TntDefenderIncidentReport {
                 } else { @{} }
             }
 
-            Write-Information "Defender incidents report completed - $($Summary.TotalIncidents) incidents found" -InformationAction Continue
+            Write-Information "FINISHED : Defender Incidents report - $($Summary.TotalIncidents) incidents found" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary   = $Summary

@@ -87,7 +87,7 @@ function Get-TntAppRegistrationExpiryReport {
     )
 
     begin {
-        Write-Information 'Starting app registration credential expiry analysis...' -InformationAction Continue
+        Write-Information 'STARTED  : App registration credential expiry analysis...' -InformationAction Continue
     }
 
     process {
@@ -96,7 +96,7 @@ function Get-TntAppRegistrationExpiryReport {
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
 
             $Credentials = [System.Collections.Generic.List[PSCustomObject]]::new()
-            $Now = Get-Date
+            $Now = [DateTime]::Now
             $ExpiryThreshold = $Now.AddDays($DaysUntilExpiry)
 
             # Page through all applications
@@ -113,21 +113,25 @@ function Get-TntAppRegistrationExpiryReport {
                         $EndDate = [DateTime]$Cred.endDateTime
                         $DaysRemaining = [Math]::Round(($EndDate - $Now).TotalDays, 0)
 
-                        $Status = if ($EndDate -lt $Now) { 'Expired' }
-                        elseif ($EndDate -le $ExpiryThreshold) { 'ExpiringSoon' }
-                        else { 'Valid' }
+                        $Status = if ($EndDate -lt $Now) {
+                            'Expired' 
+                        } elseif ($EndDate -le $ExpiryThreshold) {
+                            'ExpiringSoon' 
+                        } else {
+                            'Valid' 
+                        }
 
                         $Credentials.Add([PSCustomObject]@{
-                                AppDisplayName  = $App.displayName
-                                AppId           = $App.appId
-                                ObjectId        = $App.id
-                                CredentialType  = 'ClientSecret'
-                                CredentialName  = $Cred.displayName
-                                KeyId           = $Cred.keyId
-                                StartDate       = $Cred.startDateTime
-                                EndDate         = $EndDate
-                                DaysRemaining   = $DaysRemaining
-                                Status          = $Status
+                                AppDisplayName = $App.displayName
+                                AppId          = $App.appId
+                                ObjectId       = $App.id
+                                CredentialType = 'ClientSecret'
+                                CredentialName = $Cred.displayName
+                                KeyId          = $Cred.keyId
+                                StartDate      = $Cred.startDateTime
+                                EndDate        = $EndDate
+                                DaysRemaining  = $DaysRemaining
+                                Status         = $Status
                             })
                     }
 
@@ -136,21 +140,25 @@ function Get-TntAppRegistrationExpiryReport {
                         $EndDate = [DateTime]$Cred.endDateTime
                         $DaysRemaining = [Math]::Round(($EndDate - $Now).TotalDays, 0)
 
-                        $Status = if ($EndDate -lt $Now) { 'Expired' }
-                        elseif ($EndDate -le $ExpiryThreshold) { 'ExpiringSoon' }
-                        else { 'Valid' }
+                        $Status = if ($EndDate -lt $Now) {
+                            'Expired' 
+                        } elseif ($EndDate -le $ExpiryThreshold) {
+                            'ExpiringSoon' 
+                        } else {
+                            'Valid' 
+                        }
 
                         $Credentials.Add([PSCustomObject]@{
-                                AppDisplayName  = $App.displayName
-                                AppId           = $App.appId
-                                ObjectId        = $App.id
-                                CredentialType  = 'Certificate'
-                                CredentialName  = $Cred.displayName
-                                KeyId           = $Cred.keyId
-                                StartDate       = $Cred.startDateTime
-                                EndDate         = $EndDate
-                                DaysRemaining   = $DaysRemaining
-                                Status          = $Status
+                                AppDisplayName = $App.displayName
+                                AppId          = $App.appId
+                                ObjectId       = $App.id
+                                CredentialType = 'Certificate'
+                                CredentialName = $Cred.displayName
+                                KeyId          = $Cred.keyId
+                                StartDate      = $Cred.startDateTime
+                                EndDate        = $EndDate
+                                DaysRemaining  = $DaysRemaining
+                                Status         = $Status
                             })
                     }
                 }
@@ -158,26 +166,24 @@ function Get-TntAppRegistrationExpiryReport {
                 $Uri = $Response.'@odata.nextLink'
             } while ($Uri)
 
-            # Build summary
             $Expired = @($Credentials.Where({ $_.Status -eq 'Expired' }))
             $ExpiringSoon = @($Credentials.Where({ $_.Status -eq 'ExpiringSoon' }))
             $Valid = @($Credentials.Where({ $_.Status -eq 'Valid' }))
 
-            $AppsWithIssues = ($Credentials.Where({ $_.Status -in 'Expired', 'ExpiringSoon' }) |
-                Select-Object -ExpandProperty AppId -Unique).Count
+            $AppsWithIssues = ($Credentials.Where({ $_.Status -in 'Expired', 'ExpiringSoon' }) | Select-Object -ExpandProperty AppId -Unique).Count
 
             $Summary = [PSCustomObject]@{
-                TenantId                    = $TenantId
-                ReportGeneratedDate         = $Now
-                DaysUntilExpiryThreshold    = $DaysUntilExpiry
-                TotalCredentials            = $Credentials.Count
-                ExpiredCount                = $Expired.Count
-                ExpiringSoonCount           = $ExpiringSoon.Count
-                ValidCount                  = $Valid.Count
-                AppsWithExpiredOrExpiring    = $AppsWithIssues
+                TenantId                  = $TenantId
+                ReportGeneratedDate       = $Now
+                DaysUntilExpiryThreshold  = $DaysUntilExpiry
+                TotalCredentials          = $Credentials.Count
+                ExpiredCount              = $Expired.Count
+                ExpiringSoonCount         = $ExpiringSoon.Count
+                ValidCount                = $Valid.Count
+                AppsWithExpiredOrExpiring = $AppsWithIssues
             }
 
-            Write-Information "App registration expiry analysis completed - $($Expired.Count) expired, $($ExpiringSoon.Count) expiring soon." -InformationAction Continue
+            Write-Information "FINISHED : App registration expiry analysis - $($Expired.Count) expired, $($ExpiringSoon.Count) expiring soon." -InformationAction Continue
 
             [PSCustomObject][Ordered]@{
                 Summary     = $Summary
