@@ -140,6 +140,30 @@ function Get-TntPrivilegedRoleReport {
             Write-Verbose 'Retrieving permanent role assignments...'
             $AllPermanentAssignments = Get-MgRoleManagementDirectoryRoleAssignment -All -ExpandProperty Principal -ErrorAction Stop
 
+            # Pre-scan: collect group/SP IDs that need name resolution
+            $GroupIdsToResolve = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $SPIdsToResolve    = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            $PrivilegedRoleIds = [System.Collections.Generic.HashSet[string]]::new(
+                [string[]]($PrivilegedRoles | Select-Object -ExpandProperty Id),
+                [StringComparer]::OrdinalIgnoreCase
+            )
+
+            foreach ($Assignment in $AllPermanentAssignments) {
+                if (-not $PrivilegedRoleIds.Contains($Assignment.RoleDefinitionId)) { continue }
+
+                $HasName = $Assignment.Principal.DisplayName -or $Assignment.Principal.AdditionalProperties.displayName
+                if (-not $HasName -and $Assignment.PrincipalId) {
+                    $Type = ($Assignment.Principal.AdditionalProperties.'@odata.type' ?? '') -replace '#microsoft.graph.', ''
+                    switch ($Type) {
+                        'group'            { [void]$GroupIdsToResolve.Add($Assignment.PrincipalId) }
+                        'servicePrincipal' { [void]$SPIdsToResolve.Add($Assignment.PrincipalId) }
+                    }
+                }
+            }
+
+            # Batch resolve collected IDs
+            $PrincipalLookup = Resolve-GraphObjectNames -GroupIds @($GroupIdsToResolve) -ServicePrincipalIds @($SPIdsToResolve)
+
             foreach ($Assignment in $AllPermanentAssignments) {
                 $Role = $PrivilegedRoles | Where-Object { $_.Id -eq $Assignment.RoleDefinitionId }
                 if ($Role) {
@@ -155,21 +179,11 @@ function Get-TntPrivilegedRoleReport {
                         $PrincipalName = $Assignment.Principal.AdditionalProperties.displayName
                     }
 
-                    # If still empty, retrieve from Graph API based on principal type
+                    # If still empty, use pre-fetched lookup
                     if (-not $PrincipalName -and $Assignment.PrincipalId) {
-                        try {
-                            switch ($PrincipalType) {
-                                'group' {
-                                    $Group = Get-MgGroup -GroupId $Assignment.PrincipalId -Property DisplayName -ErrorAction SilentlyContinue
-                                    $PrincipalName = $Group.DisplayName
-                                }
-                                'servicePrincipal' {
-                                    $ServicePrincipal = Get-MgServicePrincipal -ServicePrincipalId $Assignment.PrincipalId -Property DisplayName -ErrorAction SilentlyContinue
-                                    $PrincipalName = $ServicePrincipal.DisplayName
-                                }
-                            }
-                        } catch {
-                            Write-Verbose "Unable to retrieve name for $PrincipalType $($Assignment.PrincipalId): $($_.Exception.Message)"
+                        $PrincipalName = switch ($PrincipalType) {
+                            'group'            { $PrincipalLookup.GroupLookup[$Assignment.PrincipalId] }
+                            'servicePrincipal' { $PrincipalLookup.SPLookup[$Assignment.PrincipalId] }
                         }
                     }
 

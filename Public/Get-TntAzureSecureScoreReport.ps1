@@ -181,26 +181,36 @@ function Get-TntAzureSecureScoreReport {
                 $PSCmdlet.ThrowTerminatingError($errorRecord)
             }
 
-            # Process subscriptions for secure score data
+            # Process subscriptions for secure score data (parallel across subscriptions)
             $SubscriptionSecureScores = [System.Collections.Generic.List[PSObject]]::new()
             $OverallRecommendations   = [System.Collections.Generic.List[PSObject]]::new()
             $ComplianceData           = [System.Collections.Generic.List[PSObject]]::new()
             $ProcessingErrors         = [System.Collections.Generic.List[PSObject]]::new()
 
-            foreach ($Subscription in $AllSubscriptions) {
+            Write-Verbose "Processing $($AllSubscriptions.Count) subscriptions with throttle limit: $MaxConcurrentRequests"
+
+            # Capture variables for parallel runspaces
+            $ArmBaseUri              = $Script:ArmBaseUri
+            $ArmHeaders              = $Script:ArmHeaders
+            $WantRecommendations     = $IncludeRecommendations.IsPresent
+            $WantCompliance          = $IncludeComplianceScore.IsPresent
+
+            $ParallelResults = $AllSubscriptions | ForEach-Object -ThrottleLimit $MaxConcurrentRequests -Parallel {
+                $Subscription        = $_
+                $BaseUri             = $using:ArmBaseUri
+                $Headers             = $using:ArmHeaders
+                $GetRecommendations  = $using:WantRecommendations
+                $GetCompliance       = $using:WantCompliance
 
                 try {
-                    # Get secure score for subscription
-                    Write-Verbose "Processing subscription: $($Subscription.displayName) ($($Subscription.subscriptionId))"
-
-                    $SecureScoreUri = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores/ascScore?api-version=2020-01-01"
+                    $SecureScoreUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores/ascScore?api-version=2020-01-01"
 
                     try {
-                        $SecureScoreResponse = Invoke-RestMethod -Uri $SecureScoreUri -Headers $Script:ArmHeaders -Method GET -ErrorAction Stop
+                        $SecureScoreResponse = Invoke-RestMethod -Uri $SecureScoreUri -Headers $Headers -Method GET -ErrorAction Stop
 
                         # Get secure score controls for detailed breakdown
-                        $ControlsUri      = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScoreControls?api-version=2020-01-01"
-                        $ControlsResponse = Invoke-RestMethod -Uri $ControlsUri -Headers $Script:ArmHeaders -Method GET -ErrorAction SilentlyContinue
+                        $ControlsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScoreControls?api-version=2020-01-01"
+                        $ControlsResponse = Invoke-RestMethod -Uri $ControlsUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
 
                         # Calculate control statistics using single-pass
                         $Controls              = $ControlsResponse.value ?? @()
@@ -219,11 +229,9 @@ function Get-TntAzureSecureScoreReport {
 
                         # Collect recommendations for this subscription if requested
                         $SubscriptionRecommendations = [System.Collections.Generic.List[PSObject]]::new()
-                        if ($IncludeRecommendations) {
-                            Write-Verbose "Retrieving recommendations for subscription: $($Subscription.displayName)"
-
-                            $RecommendationsUri      = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/assessments?api-version=2020-01-01"
-                            $RecommendationsResponse = Invoke-RestMethod -Uri $RecommendationsUri -Headers $Script:ArmHeaders -Method GET -ErrorAction SilentlyContinue
+                        if ($GetRecommendations) {
+                            $RecommendationsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/assessments?api-version=2020-01-01"
+                            $RecommendationsResponse = Invoke-RestMethod -Uri $RecommendationsUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
 
                             foreach ($Assessment in ($RecommendationsResponse.value ?? @())) {
                                 if ($Assessment.properties.status.code -eq 'Unhealthy') {
@@ -240,43 +248,50 @@ function Get-TntAzureSecureScoreReport {
                                         LastStatusChangeDate   = $Assessment.properties.timeGenerated
                                     }
                                     $SubscriptionRecommendations.Add($Recommendation)
-                                    $OverallRecommendations.Add($Recommendation)
+
+                                    # Output recommendation for aggregation
+                                    [PSCustomObject]@{
+                                        ResultType = 'Recommendation'
+                                        Data       = $Recommendation
+                                    }
                                 }
                             }
                         }
 
-                        $SubscriptionScore = [PSCustomObject]@{
-                            SubscriptionId          = $Subscription.subscriptionId
-                            SubscriptionName        = $Subscription.displayName
-                            TenantId                = $Subscription.tenantId
-                            State                   = $Subscription.state
-                            CurrentScore            = [math]::Round($SecureScoreResponse.properties.score.current, 2)
-                            MaxScore                = [math]::Round($SecureScoreResponse.properties.score.max, 2)
-                            ScorePercentage         = if ($SecureScoreResponse.properties.score.max -gt 0) {
-                                [math]::Round(($SecureScoreResponse.properties.score.current / $SecureScoreResponse.properties.score.max) * 100, 1)
-                            } else { 0 }
-                            Weight                  = $SecureScoreResponse.properties.weight ?? 0
-                            LastCalculatedDate      = $SecureScoreResponse.properties.lastAssessedDate ?? $SecureScoreResponse.properties.createdDate
-                            Controls                = $Controls.properties
-                            TotalControls           = $Controls.Count
-                            HealthyControls         = $HealthyControls
-                            UnhealthyControls       = $UnhealthyControls
-                            NotApplicableControls   = $NotApplicableControls
-                            SecurityCenterEnabled   = $true
-                            SecurityRecommendations = $SubscriptionRecommendations
+                        # Output subscription score
+                        [PSCustomObject]@{
+                            ResultType = 'Score'
+                            Data       = [PSCustomObject]@{
+                                SubscriptionId          = $Subscription.subscriptionId
+                                SubscriptionName        = $Subscription.displayName
+                                TenantId                = $Subscription.tenantId
+                                State                   = $Subscription.state
+                                CurrentScore            = [math]::Round($SecureScoreResponse.properties.score.current, 2)
+                                MaxScore                = [math]::Round($SecureScoreResponse.properties.score.max, 2)
+                                ScorePercentage         = if ($SecureScoreResponse.properties.score.max -gt 0) {
+                                    [math]::Round(($SecureScoreResponse.properties.score.current / $SecureScoreResponse.properties.score.max) * 100, 1)
+                                } else { 0 }
+                                Weight                  = $SecureScoreResponse.properties.weight ?? 0
+                                LastCalculatedDate      = $SecureScoreResponse.properties.lastAssessedDate ?? $SecureScoreResponse.properties.createdDate
+                                Controls                = $Controls.properties
+                                TotalControls           = $Controls.Count
+                                HealthyControls         = $HealthyControls
+                                UnhealthyControls       = $UnhealthyControls
+                                NotApplicableControls   = $NotApplicableControls
+                                SecurityCenterEnabled   = $true
+                                SecurityRecommendations = $SubscriptionRecommendations
+                            }
                         }
 
-                        $SubscriptionSecureScores.Add($SubscriptionScore)
-
                         # Get regulatory compliance if requested
-                        if ($IncludeComplianceScore) {
-                            Write-Verbose "Retrieving compliance data for subscription: $($Subscription.displayName)"
-
-                            $ComplianceUri = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/regulatoryComplianceStandards?api-version=2019-01-01-preview"
-                            $ComplianceResponse = Invoke-RestMethod -Uri $ComplianceUri -Headers $Script:ArmHeaders -Method GET -ErrorAction SilentlyContinue
+                        if ($GetCompliance) {
+                            $ComplianceUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/regulatoryComplianceStandards?api-version=2019-01-01-preview"
+                            $ComplianceResponse = Invoke-RestMethod -Uri $ComplianceUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
 
                             foreach ($Standard in ($ComplianceResponse.value ?? @())) {
-                                $ComplianceData.Add([PSCustomObject]@{
+                                [PSCustomObject]@{
+                                    ResultType = 'Compliance'
+                                    Data       = [PSCustomObject]@{
                                         SubscriptionId      = $Subscription.subscriptionId
                                         SubscriptionName    = $Subscription.displayName
                                         StandardName        = $Standard.properties.displayName
@@ -286,25 +301,29 @@ function Get-TntAzureSecureScoreReport {
                                         FailedControls      = $Standard.properties.failedControls
                                         SkippedControls     = $Standard.properties.skippedControls
                                         UnsupportedControls = $Standard.properties.unsupportedControls
-                                    })
+                                    }
+                                }
                             }
                         }
 
                     } catch {
                         # Handle subscriptions without Security Center or insufficient permissions
-                        Write-Verbose "Could not retrieve secure score for subscription $($Subscription.displayName): $($_.Exception.Message)"
-
-                        $ProcessingErrors.Add([PSCustomObject]@{
+                        [PSCustomObject]@{
+                            ResultType = 'Error'
+                            Data       = [PSCustomObject]@{
                                 SubscriptionId   = $Subscription.subscriptionId
                                 SubscriptionName = $Subscription.displayName
                                 Error            = $_.Exception.Message
                                 ErrorType        = if ($_.Exception.Message -match '403|Forbidden') { 'Insufficient Permissions' }
-                                elseif ($_.Exception.Message -match '404|Not Found') { 'Security Center Not Enabled' }
-                                else { 'API Error' }
-                            })
+                                                   elseif ($_.Exception.Message -match '404|Not Found') { 'Security Center Not Enabled' }
+                                                   else { 'API Error' }
+                            }
+                        }
 
                         # Add placeholder entry for failed subscriptions
-                        $SubscriptionSecureScores.Add([PSCustomObject]@{
+                        [PSCustomObject]@{
+                            ResultType = 'Score'
+                            Data       = [PSCustomObject]@{
                                 SubscriptionId        = $Subscription.subscriptionId
                                 SubscriptionName      = $Subscription.displayName
                                 TenantId              = $Subscription.tenantId
@@ -320,11 +339,25 @@ function Get-TntAzureSecureScoreReport {
                                 NotApplicableControls = 0
                                 SecurityCenterEnabled = $false
                                 Error                 = $_.Exception.Message
-                            })
+                            }
+                        }
                     }
                 } catch {
-                    Write-Warning "Failed to process subscription $($Subscription.displayName): $($_.Exception.Message)"
-                    continue
+                    [PSCustomObject]@{
+                        ResultType = 'Warning'
+                        Data       = "Failed to process subscription $($Subscription.displayName): $($_.Exception.Message)"
+                    }
+                }
+            }
+
+            # Aggregate parallel results by type
+            foreach ($Result in $ParallelResults) {
+                switch ($Result.ResultType) {
+                    'Score'          { $SubscriptionSecureScores.Add($Result.Data) }
+                    'Recommendation' { $OverallRecommendations.Add($Result.Data) }
+                    'Compliance'     { $ComplianceData.Add($Result.Data) }
+                    'Error'          { $ProcessingErrors.Add($Result.Data) }
+                    'Warning'        { Write-Warning $Result.Data }
                 }
             }
 

@@ -212,51 +212,10 @@ function Get-TntConditionalAccessReport {
                 }
             }
 
-            # Batch resolve groups
-            $GroupLookup = @{}
-            if ($AllGroupIds.Count -gt 0) {
-                Write-Verbose "Resolving $($AllGroupIds.Count) group GUIDs..."
-                foreach ($GroupId in $AllGroupIds) {
-                    try {
-                        $Group = Get-MgGroup -GroupId $GroupId -Property Id, DisplayName -ErrorAction SilentlyContinue
-                        if ($Group) { $GroupLookup[$GroupId] = $Group.DisplayName }
-                    } catch {
-                        Write-Verbose "Could not resolve group: $GroupId"
-                    }
-                }
-            }
-
-            # Batch resolve applications (service principals)
-            $AppLookup = @{}
-            # Well-known Microsoft application IDs
-            $WellKnownApps = @{
-                '00000002-0000-0000-c000-000000000000' = 'Azure AD Graph (Legacy)'
-                '00000003-0000-0000-c000-000000000000' = 'Microsoft Graph'
-                '00000002-0000-0ff1-ce00-000000000000' = 'Office 365 Exchange Online'
-                '00000003-0000-0ff1-ce00-000000000000' = 'Office 365 SharePoint Online'
-                '00000004-0000-0ff1-ce00-000000000000' = 'Office 365 Lync Online'
-                '797f4846-ba00-4fd7-ba43-dac1f8f63013' = 'Azure Service Management'
-                'c5393580-f805-4401-95e8-94b7a6ef2fc2' = 'Office 365 Management APIs'
-                '0000000c-0000-0000-c000-000000000000' = 'Azure AD'
-            }
-            if ($AllAppIds.Count -gt 0) {
-                Write-Verbose "Resolving $($AllAppIds.Count) application GUIDs..."
-                foreach ($AppId in $AllAppIds) {
-                    # Check well-known apps first
-                    if ($WellKnownApps.ContainsKey($AppId)) {
-                        $AppLookup[$AppId] = $WellKnownApps[$AppId]
-                    } else {
-                        try {
-                            $ServicePrincipal = Get-MgServicePrincipal -Filter "appId eq '$AppId'" -Property AppId, DisplayName -ErrorAction SilentlyContinue | Select-Object -First 1
-                            if ($ServicePrincipal) {
-                                $AppLookup[$AppId] = $ServicePrincipal.DisplayName
-                            }
-                        } catch {
-                            Write-Verbose "Could not resolve application: $AppId"
-                        }
-                    }
-                }
-            }
+            # Batch resolve groups and applications using shared helper
+            $Resolved    = Resolve-GraphObjectNames -GroupIds @($AllGroupIds) -ApplicationIds @($AllAppIds)
+            $GroupLookup = $Resolved.GroupLookup
+            $AppLookup   = $Resolved.AppLookup
 
             # Batch resolve directory roles
             $RoleLookup = @{}
