@@ -60,11 +60,9 @@ function Disconnect-TntGraphSession {
                 'RestApi' {
                     # REST API connections are stateless - but secure token cleanup is required
                     try {
-                        # SECURITY: Clear secure tokens from memory
+                        # Clear secure tokens from memory
                         if ($ConnectionState.PSObject.Properties['TokenInfo'] -and
                             $ConnectionState.TokenInfo.PSObject.Methods['ClearToken']) {
-
-                            Write-Verbose 'Clearing secure access token'
                             $ConnectionState.TokenInfo.ClearToken()
                             $ConnectionState.TokenInfo = $null
                         }
@@ -80,17 +78,13 @@ function Disconnect-TntGraphSession {
                             $ConnectionState.GetSecureHeaders = $null
                         }
 
-                        # Clear user cache for this tenant (tenant-aware cleanup)
+                        # Clear user cache for this tenant
                         if ($script:UserCache -and $ConnectionState.TenantId) {
                             $CacheKeysToRemove = @($script:UserCache.Keys | Where-Object { $_ -like "$($ConnectionState.TenantId)-*" })
                             foreach ($Key in $CacheKeysToRemove) {
                                 $script:UserCache.Remove($Key)
-                                Write-Verbose "Cleared user cache for key: $Key"
                             }
                         }
-
-                        Write-Verbose 'Secure token cleanup completed'
-
                     } catch {
                         Write-Verbose "Error during secure token cleanup: $($_.Exception.Message)"
                     }
