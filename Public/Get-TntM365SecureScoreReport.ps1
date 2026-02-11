@@ -527,8 +527,9 @@ function Get-TntM365SecureScoreReport {
             )
             $PSCmdlet.ThrowTerminatingError($errorRecord)
         } finally {
-            # Only disconnect if we established the connection
-            Disconnect-TntGraphSession -ConnectionState $ConnectionInfo
+            if ($ConnectionInfo.ShouldDisconnect) {
+                Disconnect-TntGraphSession -ConnectionState $ConnectionInfo
+            }
         }
     }
 }
