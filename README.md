@@ -2,6 +2,10 @@
 
 A PowerShell module for generating Microsoft 365 and Azure security reports.
 
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/TenantReports.svg)](https://www.powershellgallery.com/packages/TenantReports/)
+[![Downloads](https://img.shields.io/powershellgallery/dt/TenantReports.svg)](https://www.powershellgallery.com/packages/TenantReports/)
+[![License](https://img.shields.io/github/license/systommy/TenantReports)](LICENSE)
+
 ## Why This Module?
 
 After years in the MSP space as a SysAdmin and Consultant, I noticed a growing trend: clients increasingly want periodic security and compliance reports for their Microsoft 365 tenants. What started as manual data gathering became repetitive, time-consuming work.
