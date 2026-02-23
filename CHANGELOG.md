@@ -2,6 +2,14 @@
 
 All notable changes to TenantReports will be documented in this file.
 
+## 1.1.1 - 2026-02-23
+
+- Get-TntDefenderEmailThreatReport: Split Email activity data into new function: Get-TntM365EmailActivityReport
+- Renamed Incidents property to Alerts in Get-TntDefenderEmailThreatReport return object (variable $IncidentData → $Alerts); updated .DESCRIPTION and .OUTPUTS accordingly
+- Updated .DESCRIPTION of Get-TntDefenderEmailThreatReport to clarify it returns individual alert-level detections from /security/alerts_v2, not Defender incidents; added cross-reference to Get-TntDefenderIncidentReport
+- Updated .DESCRIPTION of Get-TntDefenderIncidentReport to clarify incidents are correlated attack investigations spanning email, endpoint, and identity; added cross-reference to Get-TntDefenderEmailThreatReport
+- Expanded Get-TntDefenderIncidentReport incident detail object with six new properties: Determination, AssignedTo, LastModifiedDateTime, IncidentUrl, Tags, TenantId; updated .DESCRIPTION and .OUTPUTS to reflect richer output
+
 ## 1.1.0 - 2026-02-10
 
 ### Added

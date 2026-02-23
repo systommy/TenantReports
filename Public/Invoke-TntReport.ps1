@@ -331,6 +331,9 @@ function Invoke-TntReport {
             'DefenderEmail'           = {
                 Get-TntDefenderEmailThreatReport @script:ReportParams -DaysBack 90
             }
+            'EmailActivity'           = {
+                Get-TntM365EmailActivityReport @script:ReportParams -DaysBack 90
+            }
             'Apple'              = {
                 Get-TntIntuneAppleCertificateReport @script:ReportParams
             }

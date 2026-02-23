@@ -12,7 +12,7 @@
     RootModule           = 'TenantReports.psm1'
 
     # Version number of this module.
-    ModuleVersion        = '1.1.0'
+    ModuleVersion        = '1.1.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -141,6 +141,7 @@
         'Get-TntM365AuditEvent'
         'Get-TntM365RiskyUserReport'
         'Get-TntM365SecureScoreReport'
+        'Get-TntM365EmailActivityReport'
         'Get-TntM365UserReport'
         'Get-TntPIMReport'
         'Get-TntPrivilegedRoleReport'

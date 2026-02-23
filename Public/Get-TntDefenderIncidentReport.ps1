@@ -4,8 +4,15 @@ function Get-TntDefenderIncidentReport {
         Retrieves Microsoft Defender incident summary information.
 
     .DESCRIPTION
-        Connects to Microsoft Graph to retrieve basic incident information from Microsoft Defender,
-        including incident ID, title, severity, status, and creation/modification dates.
+        Connects to Microsoft Graph to retrieve incident information from Microsoft Defender,
+        including incident ID, title, severity, status, assignment, determination, timestamps,
+        the Defender portal URL, tags, and comments.
+
+        Defender incidents are correlated attack investigations: Defender groups multiple related
+        detection signals (alerts) into a single incident to represent a coordinated threat. An
+        incident may span email, endpoint, and identity threat categories simultaneously. This is
+        distinct from individual alert-level detections — use Get-TntDefenderEmailThreatReport to
+        retrieve per-alert email threat data from /security/alerts_v2.
 
     .PARAMETER TenantId
         The Azure AD Tenant ID (GUID) to connect to.
@@ -41,8 +48,9 @@ function Get-TntDefenderIncidentReport {
     .OUTPUTS
         System.Management.Automation.PSCustomObject
         Returns a structured object containing:
-        - Summary: Counts of incidents by severity and status
-        - Incidents: Detailed list of incidents
+        - Summary: Counts of incidents by severity and status.
+        - Incidents: Projected details of each incident including IncidentUrl, AssignedTo, Determination,
+          LastModifiedDateTime, Tags, and Comments.
 
     .NOTES
         Author: Tom de Leeuw
@@ -147,13 +155,19 @@ function Get-TntDefenderIncidentReport {
             # Process incident data
             $IncidentSummary = foreach ($Incident in $Incidents) {
                 [PSCustomObject]@{
-                    IncidentId      = $Incident.Id
-                    DisplayName     = $Incident.DisplayName
-                    Severity        = $Incident.Severity
-                    Status          = $Incident.Status
-                    Classification  = $Incident.Classification
-                    CreatedDateTime = $Incident.CreatedDateTime
-                    Comments        = $Incident.Comments.Comment
+                    IncidentId           = $Incident.Id
+                    DisplayName          = $Incident.DisplayName
+                    Severity             = $Incident.Severity
+                    Status               = $Incident.Status
+                    Classification       = $Incident.Classification
+                    Determination        = $Incident.Determination
+                    AssignedTo           = $Incident.AssignedTo
+                    CreatedDateTime      = $Incident.CreatedDateTime
+                    LastModifiedDateTime = $Incident.LastUpdateDateTime
+                    IncidentUrl          = $Incident.IncidentWebUrl
+                    Tags                 = $Incident.CustomTags
+                    Comments             = $Incident.Comments.Comment
+                    TenantId             = $Incident.TenantId
                 }
             }
 
