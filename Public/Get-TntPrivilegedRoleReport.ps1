@@ -221,12 +221,15 @@ function Get-TntPrivilegedRoleReport {
                         }))
 
                 foreach ($Log in $RoleActivationLogs) {
+                    $TargetRole = @($Log.TargetResources).Where({ $_.Type -eq 'Role' }).DisplayName
+                    if (-not $TargetRole) { continue }
+
                     $RoleActivations.Add([PSCustomObject]@{
                             Id                      = $Log.Id
                             ActivityDateTime        = $Log.ActivityDateTime
                             ActivityDisplayName     = $Log.ActivityDisplayName
                             InitiatedBy             = $Log.InitiatedBy.User.UserPrincipalName
-                            TargetRole              = @($Log.TargetResources).Where({ $_.Type -eq 'Role' }).DisplayName
+                            TargetRole              = $TargetRole
                             TargetUserPrincipalName = @($Log.TargetResources).Where({ $_.Type -eq 'User' }).UserPrincipalName
                             Result                  = $Log.Result
                             ResultReason            = $Log.ResultReason
