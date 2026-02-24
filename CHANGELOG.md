@@ -4,6 +4,12 @@ All notable changes to TenantReports will be documented in this file.
 
 ## 1.1.1 - 2026-02-23
 
+### Fixed
+
+- Fix interactive auth: replace Connect-MgGraph device code with REST-based flow
+
+## Updated
+
 - Get-TntDefenderEmailThreatReport: Split Email activity data into new function: Get-TntM365EmailActivityReport
 - Renamed Incidents property to Alerts in Get-TntDefenderEmailThreatReport return object (variable $IncidentData → $Alerts); updated .DESCRIPTION and .OUTPUTS accordingly
 - Updated .DESCRIPTION of Get-TntDefenderEmailThreatReport to clarify it returns individual alert-level detections from /security/alerts_v2, not Defender incidents; added cross-reference to Get-TntDefenderIncidentReport

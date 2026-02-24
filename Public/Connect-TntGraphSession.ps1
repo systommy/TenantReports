@@ -57,6 +57,9 @@ function Connect-TntGraphSession {
 
         Establishes an interactive Microsoft Graph connection using device code flow.
         No app registration required - uses Microsoft's built-in multi-tenant app.
+        A code is printed to the console; open the displayed URL in a browser to sign in.
+        Device code flow is used to bypass WAM (Web Account Manager) on Windows, which
+        would otherwise prompt for re-authentication on each individual Graph SDK call.
 
     .OUTPUTS
         PSCustomObject with connection state information:
@@ -218,9 +221,81 @@ function Connect-TntGraphSession {
                     'Calendars.Read'
                 )
 
-                # Use browser-based interactive auth (opens default browser for sign-in)
-                Write-Host 'STARTED  : interactive authentication - a browser window will open for sign-in...' -ForegroundColor Cyan
-                Connect-MgGraph -Scopes $DelegatedScopes -NoWelcome -ErrorAction Stop
+                # Implement device code flow via REST to bypass two problems:
+                # 1. WAM (Web Account Manager) - defers token acquisition per Graph SDK call,
+                #    causing a re-authentication popup for each cmdlet (Get-MgGroup, etc.).
+                # 2. PowerShell module-scope stream suppression - Connect-MgGraph's built-in
+                #    -UseDeviceAuthentication writes the device code via WriteInformation(),
+                #    which is suppressed by $InformationPreference = 'SilentlyContinue' in
+                #    module function scope even when the caller's session has it set to Continue.
+                # By requesting the device code ourselves and using Write-Host, the prompt is
+                # always visible. The resulting access token is passed to Connect-MgGraph
+                # directly, bypassing both WAM and the stream display issue.
+                Write-Information 'STARTED  : interactive authentication - requesting device code...' -InformationAction Continue
+
+                # 14d82eec-204b-4c2f-b7e8-296a70dab67e is the Microsoft Graph PowerShell SDK
+                # public client app - the same app Connect-MgGraph -UseDeviceAuthentication uses.
+                $PublicClientId = '14d82eec-204b-4c2f-b7e8-296a70dab67e'
+                $DeviceCodeUri  = 'https://login.microsoftonline.com/common/oauth2/v2.0/devicecode'
+                $TokenUri       = 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+                $ScopeString    = (($DelegatedScopes | ForEach-Object { "https://graph.microsoft.com/$_" }) + @('openid', 'profile', 'offline_access')) -join ' '
+
+                $DeviceCodeBody = @{
+                    client_id = $PublicClientId
+                    scope     = $ScopeString
+                }
+                $DeviceCodeResult = Invoke-RestMethod -Uri $DeviceCodeUri -Method Post -Body $DeviceCodeBody -ErrorAction Stop
+
+                # Write-Host is intentionally used here: the device code prompt MUST be visible
+                # regardless of $InformationPreference or $WarningPreference in any caller scope.
+                Write-Host $DeviceCodeResult.message
+
+                $TokenBody = @{
+                    client_id   = $PublicClientId
+                    grant_type  = 'urn:ietf:params:oauth:grant-type:device_code'
+                    device_code = $DeviceCodeResult.device_code
+                }
+
+                $AccessToken  = $null
+                $PollInterval = [int]$DeviceCodeResult.interval
+                $ExpiresAt    = [DateTime]::UtcNow.AddSeconds([int]$DeviceCodeResult.expires_in)
+
+                while ([DateTime]::UtcNow -lt $ExpiresAt) {
+                    Start-Sleep -Seconds $PollInterval
+                    try {
+                        $TokenResult = Invoke-RestMethod -Uri $TokenUri -Method Post -Body $TokenBody -ErrorAction Stop
+                        $AccessToken = $TokenResult.access_token
+                        break
+                    } catch {
+                        $PollErrorBody = $_.ErrorDetails.Message | ConvertFrom-Json -ErrorAction SilentlyContinue
+                        $PollErrorCode = if ($PollErrorBody) { $PollErrorBody.error } else { 'unknown' }
+
+                        if ($PollErrorCode -eq 'authorization_pending') {
+                            # Expected - user has not yet authenticated
+                        } elseif ($PollErrorCode -eq 'slow_down') {
+                            $PollInterval += 5
+                        } elseif ($PollErrorCode -eq 'access_denied') {
+                            throw 'Interactive authentication was denied or cancelled.'
+                        } elseif ($PollErrorCode -eq 'expired_token') {
+                            throw 'Device code expired. Please run the command again.'
+                        } else {
+                            $PollErrorMessage = if ($PollErrorBody) { $PollErrorBody.error_description } else { $_.Exception.Message }
+                            throw "Authentication polling failed: $PollErrorMessage"
+                        }
+                    }
+                }
+
+                if (-not $AccessToken) {
+                    throw 'Device code authentication timed out. Please run the command again.'
+                }
+
+                $SecureToken = ConvertTo-SecureString -String $AccessToken -AsPlainText -Force
+                $ConnectParams = @{
+                    AccessToken = $SecureToken
+                    NoWelcome   = $true
+                    ErrorAction = 'Stop'
+                }
+                Connect-MgGraph @ConnectParams
 
                 $NewContext = Get-MgContext -ErrorAction Stop
                 if ($NewContext) {

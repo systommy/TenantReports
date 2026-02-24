@@ -132,7 +132,7 @@ function Get-TntM365EmailActivityReport {
                 $null = & {
                     $ProgressPreference    = 'SilentlyContinue'
                     $ErrorActionPreference = 'SilentlyContinue'
-                    Get-MgReportEmailActivityUserDetail -Period "D$ApiPeriod" -OutFile $TempFile 2>$null
+                    Get-MgReportEmailActivityUserDetail -Period "D$ApiPeriod" -OutFile $TempFile -ProgressAction SilentlyContinue 2>$null
                 }
 
                 if (-not (Test-Path $TempFile) -or (Get-Item $TempFile).Length -eq 0) {

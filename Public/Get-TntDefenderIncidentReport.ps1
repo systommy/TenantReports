@@ -182,7 +182,7 @@ function Get-TntDefenderIncidentReport {
                 } else { @{} }
             }
 
-            Write-Information "FINISHED : Defender Incidents report - $($Summary.TotalIncidents) incidents found" -InformationAction Continue
+            Write-Information "FINISHED : Microsoft Defender Incidents report - $($Summary.TotalIncidents) incidents found" -InformationAction Continue
 
             [PSCustomObject]@{
                 Summary   = $Summary

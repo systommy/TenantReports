@@ -195,7 +195,7 @@ function Get-TntM365AuditEvent {
                             $group = Get-MgGroup -GroupId $GroupId -Property DisplayName -ErrorAction Stop
                             $GroupCache[$GroupId] = $group.DisplayName
                         } catch {
-                            Write-Warning "Could not retrieve group name for ID '$GroupId' - using ID as fallback"
+                            Write-Verbose "Could not retrieve group name for ID '$GroupId' - using ID as fallback"
                             $GroupCache[$GroupId] = $GroupId
                         }
                     }
