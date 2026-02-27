@@ -246,9 +246,7 @@ function Connect-TntGraphSession {
                 }
                 $DeviceCodeResult = Invoke-RestMethod -Uri $DeviceCodeUri -Method Post -Body $DeviceCodeBody -ErrorAction Stop
 
-                # Write-Host is intentionally used here: the device code prompt MUST be visible
-                # regardless of $InformationPreference or $WarningPreference in any caller scope.
-                Write-Host $DeviceCodeResult.message
+                Write-Information "$($DeviceCodeResult.message)" -InformationAction Continue
 
                 $TokenBody = @{
                     client_id   = $PublicClientId
