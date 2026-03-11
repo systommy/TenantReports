@@ -65,17 +65,8 @@ function Resolve-GraphObjectNames {
     $SPLookup    = @{}
     $AppLookup   = @{}
 
-    # Well-known Microsoft application IDs (no API call needed)
-    $WellKnownApps = @{
-        '00000002-0000-0000-c000-000000000000' = 'Azure AD Graph (Legacy)'
-        '00000003-0000-0000-c000-000000000000' = 'Microsoft Graph'
-        '00000002-0000-0ff1-ce00-000000000000' = 'Office 365 Exchange Online'
-        '00000003-0000-0ff1-ce00-000000000000' = 'Office 365 SharePoint Online'
-        '00000004-0000-0ff1-ce00-000000000000' = 'Office 365 Lync Online'
-        '797f4846-ba00-4fd7-ba43-dac1f8f63013' = 'Azure Service Management'
-        'c5393580-f805-4401-95e8-94b7a6ef2fc2' = 'Office 365 Management APIs'
-        '0000000c-0000-0000-c000-000000000000' = 'Azure AD'
-    }
+    # Well-known Microsoft application IDs (centralized in TenantReports.psm1)
+    $WellKnownApps = $script:WellKnownAppIds
 
     # --- Groups ---
     if ($GroupIds -and $GroupIds.Count -gt 0) {

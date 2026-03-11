@@ -275,7 +275,7 @@ function Invoke-TntReport {
                 TenantId             = $TenantId
                 TenantName           = $TenantName
                 GeneratedDate        = $ReportStartTime
-                ReportVersion        = '5.0.0'
+                ReportVersion        = (Get-Module TenantReports).Version.ToString()
                 IncludedSections     = $null  # Will be populated after filtering
                 ExcludedSections     = $ExcludeSections
                 IsInteractiveAuth    = $script:IsInteractiveAuth

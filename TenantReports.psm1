@@ -54,6 +54,19 @@ $script:PrivilegedRoleNames = @(
     'Conditional Access Administrator'
 )
 
+# Well-known Microsoft application IDs (no API call needed for display name resolution)
+$script:WellKnownAppIds = @{
+    '00000002-0000-0000-c000-000000000000' = 'Azure AD Graph (Legacy)'
+    '00000003-0000-0000-c000-000000000000' = 'Microsoft Graph'
+    '00000002-0000-0ff1-ce00-000000000000' = 'Office 365 Exchange Online'
+    '00000003-0000-0ff1-ce00-000000000000' = 'Office 365 SharePoint Online'
+    '00000004-0000-0ff1-ce00-000000000000' = 'Office 365 Lync Online'
+    '797f4846-ba00-4fd7-ba43-dac1f8f63013' = 'Azure Service Management'
+    'c5393580-f805-4401-95e8-94b7a6ef2fc2' = 'Office 365 Management APIs'
+    '0000000c-0000-0000-c000-000000000000' = 'Azure AD'
+    '00000001-0000-0000-c000-000000000000' = 'Microsoft Graph (Classic)'
+}
+
 # Security cleanup on module removal
 $ExecutionContext.SessionState.Module.OnRemove = {
     Write-Verbose 'TenantReports module being removed - performing security cleanup'

@@ -146,13 +146,8 @@ function Get-TntServicePrincipalPermissionReport {
             'offline_access'                         = 'Low'
         }
 
-        # Common Microsoft Graph Resource IDs
-        $WellKnownResourceIds = @{
-            '00000003-0000-0000-c000-000000000000' = 'Microsoft Graph'
-            '00000002-0000-0000-c000-000000000000' = 'Microsoft Graph (Legacy)'
-            '797f4846-ba00-4fd7-ba43-dac1f8f63013' = 'Windows Azure Service Management API'
-            '00000001-0000-0000-c000-000000000000' = 'Microsoft Graph (Classic)'
-        }
+        # Well-known Microsoft application IDs (centralized in TenantReports.psm1)
+        $WellKnownResourceIds = $script:WellKnownAppIds
 
         Write-Information 'STARTED  : Service Principal permissions report generation...' -InformationAction Continue
     }

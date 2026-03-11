@@ -150,36 +150,20 @@ function Get-TntConditionalAccessReport {
             foreach ($Policy in $PoliciesToAnalyze) {
                 $Conditions = $Policy.Conditions
                 if ($Conditions.Users) {
-                    foreach ($Id in $Conditions.Users.IncludeUsers) {
+                    foreach ($Id in @($Conditions.Users.IncludeUsers) + @($Conditions.Users.ExcludeUsers)) {
                         if ($Id -and $Id -notin $SpecialUserValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllUserIds.Add($Id)
                         }
                     }
-                    foreach ($Id in $Conditions.Users.ExcludeUsers) {
-                        if ($Id -and $Id -notin $SpecialUserValues -and $GuidRegex.IsMatch($Id)) {
-                            [void]$AllUserIds.Add($Id)
-                        }
-                    }
-                    foreach ($Id in $Conditions.Users.IncludeGroups) {
+                    foreach ($Id in @($Conditions.Users.IncludeGroups) + @($Conditions.Users.ExcludeGroups)) {
                         if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllGroupIds.Add($Id) }
                     }
-                    foreach ($Id in $Conditions.Users.ExcludeGroups) {
-                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllGroupIds.Add($Id) }
-                    }
-                    foreach ($Id in $Conditions.Users.IncludeRoles) {
-                        if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllRoleIds.Add($Id) }
-                    }
-                    foreach ($Id in $Conditions.Users.ExcludeRoles) {
+                    foreach ($Id in @($Conditions.Users.IncludeRoles) + @($Conditions.Users.ExcludeRoles)) {
                         if ($Id -and $GuidRegex.IsMatch($Id)) { [void]$AllRoleIds.Add($Id) }
                     }
                 }
                 if ($Conditions.Applications) {
-                    foreach ($Id in $Conditions.Applications.IncludeApplications) {
-                        if ($Id -and $Id -notin $SpecialAppValues -and $GuidRegex.IsMatch($Id)) {
-                            [void]$AllAppIds.Add($Id)
-                        }
-                    }
-                    foreach ($Id in $Conditions.Applications.ExcludeApplications) {
+                    foreach ($Id in @($Conditions.Applications.IncludeApplications) + @($Conditions.Applications.ExcludeApplications)) {
                         if ($Id -and $Id -notin $SpecialAppValues -and $GuidRegex.IsMatch($Id)) {
                             [void]$AllAppIds.Add($Id)
                         }

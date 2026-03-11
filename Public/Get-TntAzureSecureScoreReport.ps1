@@ -131,6 +131,10 @@ function Get-TntAzureSecureScoreReport {
         # Azure Resource Manager endpoint
         $Script:ArmBaseUri = 'https://management.azure.com'
 
+        # API versions for Azure Security Center / Defender for Cloud
+        $SecurityApiVersion   = '2020-01-01'
+        $ComplianceApiVersion = '2019-01-01-preview'
+
         Write-Information 'STARTED  : Azure Secure Score collection...' -InformationAction Continue
     }
 
@@ -143,7 +147,7 @@ function Get-TntAzureSecureScoreReport {
             $ConnectionInfo = Connect-TntGraphSession @ConnectionParams
             $Script:ArmHeaders = $ConnectionInfo.Headers
 
-            $SubscriptionsUri      = "$($Script:ArmBaseUri)/subscriptions?api-version=2020-01-01"
+            $SubscriptionsUri      = "$($Script:ArmBaseUri)/subscriptions?api-version=$SecurityApiVersion"
             $SubscriptionsResponse = Invoke-RestMethod -Uri $SubscriptionsUri -Headers $Script:ArmHeaders -Method GET -ErrorAction Stop
             $AllSubscriptions      = $SubscriptionsResponse.value.Where({ $_.state -eq 'Enabled' })
 
@@ -186,14 +190,19 @@ function Get-TntAzureSecureScoreReport {
                 $GetCompliance       = $using:WantCompliance
 
                 try {
-                    $SecureScoreUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores/ascScore?api-version=2020-01-01"
+                    $SecureScoreUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores/ascScore?api-version=$SecurityApiVersion"
 
                     try {
                         $SecureScoreResponse = Invoke-RestMethod -Uri $SecureScoreUri -Headers $Headers -Method GET -ErrorAction Stop
 
                         # Get secure score controls for detailed breakdown
-                        $ControlsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScoreControls?api-version=2020-01-01"
-                        $ControlsResponse = Invoke-RestMethod -Uri $ControlsUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
+                        $ControlsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScoreControls?api-version=$SecurityApiVersion"
+                        try {
+                            $ControlsResponse = Invoke-RestMethod -Uri $ControlsUri -Headers $Headers -Method GET -ErrorAction Stop
+                        } catch {
+                            Write-Warning "Could not retrieve security controls for subscription '$($Subscription.displayName)': $($_.Exception.Message)"
+                            $ControlsResponse = $null
+                        }
 
                         # Calculate control statistics using single-pass
                         $Controls              = $ControlsResponse.value ?? @()
@@ -213,8 +222,13 @@ function Get-TntAzureSecureScoreReport {
                         # Collect recommendations for this subscription if requested
                         $SubscriptionRecommendations = [System.Collections.Generic.List[PSObject]]::new()
                         if ($GetRecommendations) {
-                            $RecommendationsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/assessments?api-version=2020-01-01"
-                            $RecommendationsResponse = Invoke-RestMethod -Uri $RecommendationsUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
+                            $RecommendationsUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/assessments?api-version=$SecurityApiVersion"
+                            try {
+                                $RecommendationsResponse = Invoke-RestMethod -Uri $RecommendationsUri -Headers $Headers -Method GET -ErrorAction Stop
+                            } catch {
+                                Write-Warning "Could not retrieve security recommendations for subscription '$($Subscription.displayName)': $($_.Exception.Message)"
+                                $RecommendationsResponse = $null
+                            }
 
                             foreach ($Assessment in ($RecommendationsResponse.value ?? @())) {
                                 if ($Assessment.properties.status.code -eq 'Unhealthy') {
@@ -268,8 +282,13 @@ function Get-TntAzureSecureScoreReport {
 
                         # Get regulatory compliance if requested
                         if ($GetCompliance) {
-                            $ComplianceUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/regulatoryComplianceStandards?api-version=2019-01-01-preview"
-                            $ComplianceResponse = Invoke-RestMethod -Uri $ComplianceUri -Headers $Headers -Method GET -ErrorAction SilentlyContinue
+                            $ComplianceUri      = "$BaseUri/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/regulatoryComplianceStandards?api-version=$ComplianceApiVersion"
+                            try {
+                                $ComplianceResponse = Invoke-RestMethod -Uri $ComplianceUri -Headers $Headers -Method GET -ErrorAction Stop
+                            } catch {
+                                Write-Warning "Could not retrieve regulatory compliance data for subscription '$($Subscription.displayName)': $($_.Exception.Message)"
+                                $ComplianceResponse = $null
+                            }
 
                             foreach ($Standard in ($ComplianceResponse.value ?? @())) {
                                 [PSCustomObject]@{
@@ -415,8 +434,13 @@ function Get-TntAzureSecureScoreReport {
 
                         # Try to get historical secure score data
                         try {
-                            $HistoryScoreUri = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores?api-version=2020-01-01&`$filter=createdDateTime ge $StartDate&`$orderby=createdDateTime desc"
-                            $HistoryResponse = Invoke-RestMethod -Uri $HistoryScoreUri -Headers $Script:ArmHeaders -Method GET -ErrorAction SilentlyContinue
+                            $HistoryScoreUri = "$($Script:ArmBaseUri)/subscriptions/$($Subscription.subscriptionId)/providers/Microsoft.Security/secureScores?api-version=$SecurityApiVersion&`$filter=createdDateTime ge $StartDate&`$orderby=createdDateTime desc"
+                            try {
+                                $HistoryResponse = Invoke-RestMethod -Uri $HistoryScoreUri -Headers $Script:ArmHeaders -Method GET -ErrorAction Stop
+                            } catch {
+                                Write-Warning "Could not retrieve score history for subscription '$($Subscription.displayName)': $($_.Exception.Message)"
+                                $HistoryResponse = $null
+                            }
 
                             if ($HistoryResponse.value) {
                                 foreach ($HistoryEntry in $HistoryResponse.value) {

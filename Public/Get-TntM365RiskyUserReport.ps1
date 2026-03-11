@@ -158,7 +158,12 @@ function Get-TntM365RiskyUserReport {
                 'riskLastUpdatedDateTime'
             )
             
-            $RiskyUsers = Get-MgRiskyUser -All @FilterParams -Top $MaxRiskyUsers -ErrorAction SilentlyContinue | Select-Object $RiskyUserProperties
+            try {
+                $RiskyUsers = Get-MgRiskyUser -All @FilterParams -Top $MaxRiskyUsers -ErrorAction Stop | Select-Object $RiskyUserProperties
+            } catch {
+                Write-Warning "Could not retrieve risky users. The tenant may not have Azure AD Premium P2 or Identity Protection enabled: $($_.Exception.Message)"
+                $RiskyUsers = @()
+            }
             Write-Verbose "Found $($RiskyUsers.Count) risky users."
 
             # Process Risky Users data for report, including fetching risk event types
@@ -166,7 +171,7 @@ function Get-TntM365RiskyUserReport {
                 $RiskEventTypes = @()
                 if ($IncludeHistory) {
                     try {
-                        $RiskyUserHistory = Get-MgRiskyUserHistory -RiskyUserId $RiskyUser.Id -ErrorAction SilentlyContinue
+                        $RiskyUserHistory = Get-MgRiskyUserHistory -RiskyUserId $RiskyUser.Id -ErrorAction Stop
                         if ($RiskyUserHistory) {
                             $RiskEventTypes = ($RiskyUserHistory.Activity | Select-Object -ExpandProperty RiskEventTypes | Select-Object -Unique) -join ', '
                         }
@@ -194,8 +199,13 @@ function Get-TntM365RiskyUserReport {
             # Collect Risk Detections
             Write-Verbose "Retrieving risk detections..."
             $FilterString   = "LastUpdatedDateTime ge $($StartDate)"
-            $RiskDetections = Get-MgRiskDetection -All -Filter $FilterString -ErrorAction SilentlyContinue
-            
+            try {
+                $RiskDetections = Get-MgRiskDetection -All -Filter $FilterString -ErrorAction Stop
+            } catch {
+                Write-Warning "Could not retrieve risk detections: $($_.Exception.Message)"
+                $RiskDetections = @()
+            }
+
             $RiskDetectionsReport = foreach ($RiskDetection in $RiskDetections) {
                 [PSCustomObject]@{
                     'Id'                      = $RiskDetection.id
@@ -215,8 +225,13 @@ function Get-TntM365RiskyUserReport {
             # Collect risky Service Principals
             Write-Verbose "Retrieving risky service principals..."
             $FilterString           = "riskLastUpdatedDateTime ge $($StartDate)"
-            $RiskyServicePrincipals = Get-MgRiskyServicePrincipal -All -Filter $FilterString -ErrorAction SilentlyContinue
-            
+            try {
+                $RiskyServicePrincipals = Get-MgRiskyServicePrincipal -All -Filter $FilterString -ErrorAction Stop
+            } catch {
+                Write-Warning "Could not retrieve risky service principals: $($_.Exception.Message)"
+                $RiskyServicePrincipals = @()
+            }
+
             $RiskyServicePrincipalReport = foreach ($RiskyService in $RiskyServicePrincipals) {
                 [PSCustomObject]@{
                     'Id'                          = $RiskyService.id

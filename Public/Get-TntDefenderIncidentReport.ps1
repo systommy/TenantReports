@@ -143,10 +143,13 @@ function Get-TntDefenderIncidentReport {
 
             # Retrieve incidents
             Write-Verbose 'Retrieving Microsoft Defender incidents...'
-            $Incidents = Get-MgSecurityIncident @FilterParams -All -ErrorAction SilentlyContinue
-
-            if (-not $Incidents) {
-                Write-Verbose "No incidents found or Defender not enabled."
+            try {
+                $Incidents = Get-MgSecurityIncident @FilterParams -All -ErrorAction Stop
+                if (-not $Incidents) {
+                    $Incidents = @()
+                }
+            } catch {
+                Write-Warning "Could not retrieve Defender incidents. Microsoft Defender may not be enabled for this tenant: $($_.Exception.Message)"
                 $Incidents = @()
             }
 
