@@ -218,7 +218,6 @@ function Connect-TntGraphSession {
                     'Directory.Read.All'
                     'Policy.Read.All'
                     'SecurityEvents.Read.All'
-                    'SecurityIncident.Read.All'
                     'RoleManagement.Read.Directory'
                     'DeviceManagementManagedDevices.Read.All'
                     'DeviceManagementConfiguration.Read.All'

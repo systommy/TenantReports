@@ -392,7 +392,7 @@ function Invoke-TntReport {
         # - AzureSecureScore: Requires an Azure ARM token; the interactive flow currently only
         #   acquires a Microsoft Graph token. Needs a dedicated device-code flow for the
         #   https://management.azure.com/.default scope (TODO).
-        $InteractiveIncompatibleSections = @('RiskyUsers', 'DefenderEmail', 'AzureSecureScore')
+        $InteractiveIncompatibleSections = @('RiskyUsers', 'DefenderEmail', 'AzureSecureScore', 'DefenderIncidents')
         if ($script:IsInteractiveAuth) {
             $SkippedSections = [System.Collections.Generic.List[string]]::new()
             foreach ($Section in $InteractiveIncompatibleSections) {
