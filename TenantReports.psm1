@@ -22,6 +22,10 @@ $Public | ForEach-Object {
 }
 
 # Script variables used across multiple functions
+# Parameters that Get-ConnectionParameters may forward to Connect-TntGraphSession.
+# Only include names that Connect-TntGraphSession actually accepts (or aliases thereof),
+# otherwise the splat fails parameter binding. TenantName is intentionally NOT here -
+# it is report metadata on Invoke-TntReport and not a connection parameter.
 $script:ValidConnectionParams = @(
     'TenantId'
     'ClientId'
@@ -29,9 +33,6 @@ $script:ValidConnectionParams = @(
     'CertificateThumbprint'
     'ApplicationId'
     'Scopes'
-    'WithSecureClientId'
-    'WithSecureClientSecret'
-    'TenantName'
     'UseManagedIdentity'
     'Interactive'
 )

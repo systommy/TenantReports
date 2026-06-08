@@ -96,11 +96,12 @@ function Invoke-TntReport {
         - AzureSecureScore: Azure Security Center score
         - Users: User accounts and activity analysis
         - RiskyUsers: Identity Protection risky users
-        - PrivilegedAccess: Privileged roles and PIM configuration
+        - PrivilegedRoles: Privileged role assignments and break-glass accounts
+        - PIM: Privileged Identity Management configuration
         - Intune: Device compliance status
         - ServicePrincipals: Application permissions audit
         - DefenderIncidents: Security incidents (if available)
-        - Defender: Email threat analysis
+        - DefenderEmail: Email threat analysis
         - Additional sections based on parameters
 
     .NOTES
@@ -185,16 +186,7 @@ function Invoke-TntReport {
         [string[]]$ExcludeSections,
 
         [Parameter()]
-        [string]$TenantName,
-
-        [Parameter()]
-        [string]$WsClientId,
-
-        [Parameter()]
-        $WsClientSecret,
-
-        [Parameter()]
-        [string]$WsOrganizationName
+        [string]$TenantName
     )
 
     begin {
@@ -210,7 +202,7 @@ function Invoke-TntReport {
         }
 
         # Prepare common parameters for all report functions
-        # Note: WithSecure and TenantName parameters are excluded as they're not accepted by all report functions
+        # Note: TenantName is excluded; it is report metadata only, not accepted by the report functions
         $script:ReportParams = @{}
         foreach ($Param in $PSBoundParameters.GetEnumerator()) {
             if ($Param.Key -in @('TenantId', 'ClientId', 'ClientSecret', 'CertificateThumbprint', 'Interactive')) {
@@ -376,12 +368,6 @@ function Invoke-TntReport {
         if ($IncludeCalendarPermissions) {
             $AvailableSections['CalendarPermissions'] = {
                 Get-TntExchangeCalendarPermissionReport @script:ReportParams
-            }
-        }
-
-        if ($WsClientId -and $WsClientSecret -and $WsOrganizationName) {
-            $AvailableSections['WithSecure'] = {
-                Get-TntWithSecureReport -WsClientId $WsClientId -WsClientSecret $WsClientSecret -WsOrganizationName $WsOrganizationName
             }
         }
 

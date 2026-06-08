@@ -2,6 +2,24 @@
 
 All notable changes to TenantReports will be documented in this file.
 
+## 1.1.2 - 2026-06-08
+
+### Added
+- Azure Service Management support in the setup script (`New-TenantReportsAppRegistration.ps1`) with optional Azure RBAC role assignment
+- 7 additional Microsoft Graph application permissions in the setup script
+
+### Fixed
+- Setup script: corrected application permission GUIDs for `DeviceManagementConfiguration.Read.All` and `DeviceManagementApps.Read.All` (were delegated GUIDs instead of application GUIDs)
+- `Get-TntAzureSecureScoreReport`: resolved HTTP 400 errors caused by a missing `$using:` scope in parallel runspaces — rewritten as a sequential loop
+- `Get-TntM365EmailActivityReport`: fixed crash from Graph SDK `PercentComplete` overflow
+- `Get-TntAzureSecureScoreReport`: now skips gracefully under `-Interactive` instead of failing parameter-set resolution (Azure Resource Manager REST requires an app-only token; `Invoke-TntReport -Interactive` also skips the section automatically)
+- `Get-ValidSecurityReportSection`: re-synced with `Invoke-TntReport`'s actual section keys so `-IncludeSections`/`-ExcludeSections` validation and tab-completion are correct (added `TenantConfiguration`, `PrivilegedRoles`, `PIM`; removed stale `PrivilegedAccess` and `WithSecureEndpoints`)
+- `Invoke-TntReport`: corrected stale section names in the `.OUTPUTS` help (`PrivilegedAccess` → `PrivilegedRoles`/`PIM`, `Defender` → `DefenderEmail`)
+
+### Removed
+- Legacy WithSecure integration remnants: `-WsClientId`/`-WsClientSecret`/`-WsOrganizationName` parameters and the WithSecure section block in `Invoke-TntReport`, plus `WithSecureClientId`/`WithSecureClientSecret` from `$script:ValidConnectionParams`
+- `TenantName` from `$script:ValidConnectionParams` — it is report metadata, not a `Connect-TntGraphSession` parameter, and forwarding it broke the connection splat when `-TenantName` was supplied
+
 ## 1.1.1 - 2026-02-23
 
 ### Fixed

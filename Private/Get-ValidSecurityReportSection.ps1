@@ -31,29 +31,38 @@ function Get-ValidSecurityReportSection {
     [OutputType([string[]])]
     param()
 
+    # These MUST match the section keys defined in Invoke-TntReport's $AvailableSections.
+    # Always-available sections first, then the parameter-gated sections.
     @(
         'TenantInfo',
+        'TenantConfiguration',
         'LicenseAllocation',
         'ConditionalAccess',
         'SecureScore',
         'AzureSecureScore',
         'Users',
         'RiskyUsers',
-        'PrivilegedAccess',
-        'ServicePrincipals',
+        'PrivilegedRoles',
+        'PIM',
         'Intune',
+        'ServicePrincipals',
         'DefenderIncidents',
         'DefenderEmail',
         'EmailActivity',
         'Apple',
-        'GroupMembershipAudit',
-        'UserCreationAudit',
-        'MailboxPermissions',
-        'CalendarPermissions',
-        'SharedMailboxCompliance',
-        'InboxForwardingRules',
         'LicenseChangeAudit',
         'AppRegistrationExpiry',
-        'WithSecureEndpoints'
+
+        # Added only when -IncludeAuditReports is specified
+        'GroupMembershipAudit',
+        'UserCreationAudit',
+
+        # Added only when -IncludeMailboxPermissions is specified
+        'MailboxPermissions',
+        'SharedMailboxCompliance',
+        'InboxForwardingRules',
+
+        # Added only when -IncludeCalendarPermissions is specified
+        'CalendarPermissions'
     )
 }

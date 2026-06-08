@@ -129,6 +129,16 @@ function Get-TntAzureSecureScoreReport {
     }
 
     process {
+        # Azure Resource Manager REST access requires an app-only ARM token obtained via
+        # client secret or certificate. Interactive (delegated) auth cannot acquire one, and
+        # passing -Scope/-ConnectionType alongside -Interactive to Connect-TntGraphSession
+        # would fail parameter-set resolution. Skip gracefully, mirroring the Defender reports.
+        if ($Interactive) {
+            Write-Warning 'Get-TntAzureSecureScoreReport requires application authentication (client secret or certificate) and cannot run with interactive authentication.'
+            Write-Warning 'The app registration needs the Azure Service Management permission and a Security Reader (or higher) role on each subscription.'
+            return $null
+        }
+
         try {
             # Establish connection
             $ConnectionParams = Get-ConnectionParameters -BoundParameters $PSBoundParameters
